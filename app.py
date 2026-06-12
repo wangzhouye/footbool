@@ -104,7 +104,45 @@ with st.sidebar:
         st.success(f"✅ 实时数据已加载：{len(live_matches)} 场比赛")
     else:
         st.warning("⚠️ 实时数据未加载")
-        st.info("可能原因：\n1. 当前无世界杯比赛\n2. ESPN/SofaScore/API-Football 无法访问\n3. 网络连接问题")
+
+        # 测试 API 连接
+        st.markdown("---")
+        st.subheader("🔧 API 测试")
+
+        if st.button("测试 ESPN API"):
+            try:
+                import requests
+                response = requests.get(
+                    "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world.cup/scoreboard",
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    events = data.get("events", [])
+                    st.success(f"✅ ESPN API 可用，返回 {len(events)} 场比赛")
+                else:
+                    st.error(f"❌ ESPN API 返回状态码: {response.status_code}")
+            except Exception as e:
+                st.error(f"❌ ESPN API 连接失败: {e}")
+
+        if st.button("测试 SofaScore API"):
+            try:
+                import requests
+                response = requests.get(
+                    "https://api.sofascore.com/api/v1/unique-tournament/16/season/52186/events",
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    events = data.get("events", [])
+                    st.success(f"✅ SofaScore API 可用，返回 {len(events)} 场比赛")
+                else:
+                    st.error(f"❌ SofaScore API 返回状态码: {response.status_code}")
+            except Exception as e:
+                st.error(f"❌ SofaScore API 连接失败: {e}")
+
+        st.markdown("---")
+        st.info("如果 API 测试失败，说明 Streamlit Cloud 服务器无法访问这些 API")
 
 # ── 常量 ───────────────────────────────────────────
 TOURNAMENT_START = date(2026, 6, 12)
