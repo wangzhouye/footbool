@@ -10,6 +10,7 @@ from collections import defaultdict
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from streamlit_autorefresh import st_autorefresh
 
 from src.data.loader import load_all
@@ -60,6 +61,11 @@ TOURNAMENT_START = date(2026, 6, 12)
 TOURNAMENT_END = date(2026, 7, 20)
 STATUS_CN = {"upcoming": "⏳ 未开赛", "possibly_live": "🔴 进行中", "likely_completed": "✅ 已完场", "completed": "✅ 已完场"}
 
+# 使用北京时间
+BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+today = datetime.now(BEIJING_TZ).date()
+now_beijing = datetime.now(BEIJING_TZ)
+
 # ── 侧边栏 ─────────────────────────────────────────
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/football2--v1.png", width=64)
@@ -83,11 +89,10 @@ with st.sidebar:
         st.markdown(f"**状态：** ✅已完场 {c} · 🔴进行中 {l} · ⏳未开赛 {u}")
 
     st.markdown("---")
-    st.caption(f"🔄 每60秒自动刷新 | {datetime.now().strftime('%H:%M:%S')}")
+    st.caption(f"🔄 每60秒自动刷新 | {now_beijing.strftime('%H:%M:%S')} (北京时间)")
 
 # ── 头部 ──────────────────────────────────────────
 schedule = data["schedule"]
-today = date.today()
 day = max(1, (today - TOURNAMENT_START).days + 1)
 is_tournament = TOURNAMENT_START <= today <= TOURNAMENT_END
 
