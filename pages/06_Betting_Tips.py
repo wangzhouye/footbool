@@ -23,6 +23,7 @@ from src.models.value_analyzer import (
     calculate_ev, calculate_kelly
 )
 from src.data.sporttery_scraper import SportteryScraper, odds_to_win_probability
+from src.data.odds_api import get_odds_api
 from src.utils.viz_helpers import (
     create_ev_comparison_chart, create_ev_heatmap, create_opportunity_bar_chart
 )
@@ -61,6 +62,20 @@ predictor, data = init()
 
 @st.cache_data(ttl=120)
 def fetch_odds():
+    """获取赔率数据，优先使用海外数据源"""
+    # 尝试海外数据源
+    odds_api = get_odds_api()
+    if odds_api:
+        try:
+            raw_data = odds_api.get_world_cup_odds()
+            if raw_data:
+                parsed = odds_api.parse_odds(raw_data)
+                if parsed:
+                    return parsed
+        except Exception:
+            pass
+
+    # 回退到中国竞彩网
     try:
         return SportteryScraper().get_world_cup_odds()
     except Exception:
@@ -76,7 +91,9 @@ with st.sidebar:
     st.title("💰 投注价值分析")
 
     if odds_list:
-        st.markdown(f"🟢 **赔率数据已连接** — {len(odds_list)} 场比赛")
+        # 判断数据源
+        source = "The Odds API" if any(m.get("bookmakers") for m in odds_list) else "中国竞彩网"
+        st.markdown(f"🟢 **{source}已连接** — {len(odds_list)} 场比赛")
     else:
         st.markdown("🔴 赔率数据未连接")
 
