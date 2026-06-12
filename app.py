@@ -89,7 +89,7 @@ with st.sidebar:
         st.markdown(f"**状态：** ✅已完场 {c} · 🔴进行中 {l} · ⏳未开赛 {u}")
 
     st.markdown("---")
-    st.caption(f"🔄 每60秒自动刷新 | {now_beijing.strftime('%H:%M:%S')} (北京时间)")
+    st.caption(f"🔄 每10分钟自动刷新 | {now_beijing.strftime('%H:%M:%S')} (北京时间)")
 
 # ── 头部 ──────────────────────────────────────────
 schedule = data["schedule"]
