@@ -1,0 +1,49 @@
+team,code,group,confederation,elo_seed,flag
+Mexico,MEX,A,CONCACAF,1800,🇲🇽
+South Africa,RSA,A,CAF,1640,🇿🇦
+South Korea,KOR,A,AFC,1800,🇰🇷
+Czech Republic,CZE,A,UEFA,1780,🇨🇿
+Canada,CAN,B,CONCACAF,1750,🇨🇦
+Bosnia,BIH,B,UEFA,1680,🇧🇦
+Qatar,QAT,B,AFC,1660,🇶🇦
+Switzerland,SUI,B,UEFA,1820,🇨🇭
+Brazil,BRA,C,CONMEBOL,2080,🇧🇷
+Morocco,MAR,C,CAF,1880,🇲🇦
+Haiti,HAI,C,CONCACAF,1560,🇭🇹
+Scotland,SCO,C,UEFA,1760,🏴󠁧󠁢󠁳󠁣󠁴󠁿
+USA,USA,D,CONCACAF,1780,🇺🇸
+Paraguay,PAR,D,CONMEBOL,1680,🇵🇾
+Australia,AUS,D,AFC,1740,🇦🇺
+Turkey,TUR,D,UEFA,1780,🇹🇷
+Germany,GER,E,UEFA,1980,🇩🇪
+Curacao,CUW,E,CONCACAF,1520,🇨🇼
+Ivory Coast,CIV,E,CAF,1700,🇨🇮
+Ecuador,ECU,E,CONMEBOL,1740,🇪🇨
+Netherlands,NED,F,UEFA,1960,🇳🇱
+Japan,JPN,F,AFC,1840,🇯🇵
+Sweden,SWE,F,UEFA,1760,🇸🇪
+Tunisia,TUN,F,CAF,1700,🇹🇳
+Belgium,BEL,G,UEFA,1920,🇧🇪
+Egypt,EGY,G,CAF,1760,🇪🇬
+Iran,IRN,G,AFC,1760,🇮🇷
+New Zealand,NZL,G,OFC,1580,🇳🇿
+Spain,ESP,H,UEFA,2050,🇪🇸
+Cape Verde,CPV,H,CAF,1600,🇨🇻
+Saudi Arabia,KSA,H,AFC,1700,🇸🇦
+Uruguay,URU,H,CONMEBOL,1900,🇺🇾
+France,FRA,I,UEFA,2100,🇫🇷
+Senegal,SEN,I,CAF,1820,🇸🇳
+Iraq,IRQ,I,AFC,1640,🇮🇶
+Norway,NOR,I,UEFA,1780,🇳🇴
+Argentina,ARG,J,CONMEBOL,2120,🇦🇷
+Algeria,ALG,J,CAF,1740,🇩🇿
+Austria,AUT,J,UEFA,1800,🇦🇹
+Jordan,JOR,J,AFC,1580,🇯🇴
+Portugal,POR,K,UEFA,2000,🇵🇹
+DR Congo,COD,K,CAF,1620,🇨🇩
+Uzbekistan,UZB,K,AFC,1620,🇺🇿
+Colombia,COL,K,CONMEBOL,1860,🇨🇴
+England,ENG,L,UEFA,2020,🏴󠁧󠁢󠁥󠁮󠁧󠁿
+Croatia,CRO,L,UEFA,1940,🇭🇷
+Ghana,GHA,L,CAF,1740,🇬🇭
+Panama,PAN,L,CONCACAF,1640,🇵🇦

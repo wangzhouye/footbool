@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(streamlit run *)",
+      "Bash(where.exe streamlit *)",
+      "Bash(python -m streamlit --version)",
+      "Bash(taskkill //F //IM \"python.exe\" //T、)",
+      "Bash(python -m streamlit run app.py --server.headless true)",
+      "Bash(python -c ' *)",
+      "Bash(python fix_schedule.py)",
+      "mcp__node_repl__js"
+    ]
+  }
+}

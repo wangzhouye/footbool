@@ -1,0 +1,13 @@
+{
+  "tasks": [
+    {
+      "id": "775b78e0",
+      "cron": "7 */12 * * *",
+      "prompt": "运行 ESPN 赛程数据更新脚本：cd D:/Codexproject/footbool && python scheduled_update.py",
+      "createdAt": 1781282573173,
+      "recurring": true,
+      "createdBySessionId": "d7dfeca1-b8b0-40a4-95b6-c753423f88db",
+      "createdByPid": 2352
+    }
+  ]
+}
