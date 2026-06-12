@@ -91,6 +91,7 @@ class LiveDataFetcher:
             ]
         """
         logger.info("正在获取实时比赛数据...")
+        errors = []
 
         # 尝试 ESPN API
         try:
@@ -98,8 +99,12 @@ class LiveDataFetcher:
             if matches:
                 logger.info(f"从 ESPN 获取到 {len(matches)} 场比赛")
                 return matches
+            else:
+                logger.info("ESPN API 返回空数据（可能当前无比赛）")
         except Exception as e:
-            logger.warning(f"ESPN API 失败: {e}")
+            error_msg = f"ESPN API 失败: {e}"
+            logger.warning(error_msg)
+            errors.append(error_msg)
 
         # 尝试 SofaScore API
         try:
@@ -107,8 +112,12 @@ class LiveDataFetcher:
             if matches:
                 logger.info(f"从 SofaScore 获取到 {len(matches)} 场比赛")
                 return matches
+            else:
+                logger.info("SofaScore API 返回空数据（可能当前无比赛）")
         except Exception as e:
-            logger.warning(f"SofaScore API 失败: {e}")
+            error_msg = f"SofaScore API 失败: {e}"
+            logger.warning(error_msg)
+            errors.append(error_msg)
 
         # 尝试 API-Football（免费端点）
         try:
@@ -116,11 +125,19 @@ class LiveDataFetcher:
             if matches:
                 logger.info(f"从 API-Football 获取到 {len(matches)} 场比赛")
                 return matches
+            else:
+                logger.info("API-Football 返回空数据（可能当前无比赛）")
         except Exception as e:
-            logger.warning(f"API-Football 失败: {e}")
+            error_msg = f"API-Football 失败: {e}"
+            logger.warning(error_msg)
+            errors.append(error_msg)
 
-        # 返回空列表
-        logger.warning("所有数据源都失败")
+        # 返回空列表，记录所有错误
+        if errors:
+            logger.warning(f"所有数据源都失败: {'; '.join(errors)}")
+        else:
+            logger.info("所有数据源都返回空数据（可能当前无比赛）")
+
         return []
 
     def _fetch_from_espn(self) -> List[Dict]:

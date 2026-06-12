@@ -103,7 +103,8 @@ with st.sidebar:
     if live_matches:
         st.success(f"✅ 实时数据已加载：{len(live_matches)} 场比赛")
     else:
-        st.warning("⚠️ 实时数据未加载（可能原因：无比赛或API无法访问）")
+        st.warning("⚠️ 实时数据未加载")
+        st.info("可能原因：\n1. 当前无世界杯比赛\n2. ESPN/SofaScore/API-Football 无法访问\n3. 网络连接问题")
 
 # ── 常量 ───────────────────────────────────────────
 TOURNAMENT_START = date(2026, 6, 12)
