@@ -16,6 +16,7 @@ from streamlit_autorefresh import st_autorefresh
 from src.data.loader import load_all
 from src.models.predictor import MatchPredictor
 from src.data.sporttery_scraper import SportteryScraper, odds_to_win_probability
+from src.data.odds_api import get_odds_api
 from src.utils.viz_helpers import create_champion_bar_chart, create_confederation_pie
 from src.utils.config import TEAMS, GROUPS
 
@@ -47,14 +48,37 @@ def init():
 
 predictor, data = init()
 
-@st.cache_data(ttl=50)
+@st.cache_data(ttl=120)
 def fetch_live():
+    """获取实时赔率数据，优先使用海外数据源"""
+    # 尝试海外数据源
+    odds_api = get_odds_api()
+    if odds_api:
+        try:
+            raw_data = odds_api.get_world_cup_odds()
+            if raw_data:
+                parsed = odds_api.parse_odds(raw_data)
+                if parsed:
+                    return {
+                        "source": "odds_api",
+                        "all_odds": parsed,
+                        "live_today": [],
+                        "upcoming": parsed,
+                        "completed": [],
+                    }
+        except Exception as e:
+            logger.warning(f"海外数据源获取失败: {e}")
+
+    # 回退到中国竞彩网
     try:
         return SportteryScraper().get_all_world_cup_data()
     except Exception:
         return None
 
 live = fetch_live()
+
+# 数据源信息
+data_source = live.get("source", "sporttery") if live else "none"
 
 # ── 常量 ───────────────────────────────────────────
 TOURNAMENT_START = date(2026, 6, 12)
@@ -73,9 +97,10 @@ with st.sidebar:
 
     if live:
         n = len(live.get("all_odds", []))
-        st.markdown(f"🟢 **竞彩数据已连接** — {n} 场比赛")
+        source_name = "The Odds API" if live.get("source") == "odds_api" else "中国竞彩网"
+        st.markdown(f"🟢 **{source_name}已连接** — {n} 场比赛")
     else:
-        st.markdown("🔴 竞彩数据未连接")
+        st.markdown("🔴 赔率数据未连接")
 
     st.markdown("---")
     st.markdown(f"**赛事时间：** 2026.6.12 – 7.20（北京时间）")
@@ -258,4 +283,5 @@ if not schedule.empty:
             st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
 st.markdown("---")
-st.caption("⚽ 2026 世界杯预测工具 | 赔率：中国体育彩票竞彩网 | 预测仅供参考")
+source_text = "The Odds API" if data_source == "odds_api" else "中国体育彩票竞彩网"
+st.caption(f"⚽ 2026 世界杯预测工具 | 赔率：{source_text} | 预测仅供参考")
