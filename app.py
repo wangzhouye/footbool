@@ -22,8 +22,8 @@ from src.utils.config import TEAMS, GROUPS
 # ── 页面设置 ────────────────────────────────────────
 st.set_page_config(page_title="2026 世界杯预测工具", page_icon="🏆", layout="wide")
 
-# 自动刷新（60秒）
-st_autorefresh(interval=60000, key="main_autorefresh")
+# 自动刷新（10分钟）
+st_autorefresh(interval=600000, key="main_autorefresh")
 
 # ── 样式 ───────────────────────────────────────────
 st.markdown("""
