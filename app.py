@@ -435,12 +435,6 @@ if live_matches:
             </div>
             """, unsafe_allow_html=True)
 
-    # 显示所有比赛详情（调试用）
-    with st.expander("📊 查看所有比赛数据（调试）"):
-        for i, match in enumerate(live_matches):
-            st.markdown(f"**比赛 {i+1}:**")
-            st.json(match)
-
 st.markdown("---")
 
 # ── 冠军概率 ──────────────────────────────────────
