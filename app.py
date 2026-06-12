@@ -17,14 +17,15 @@ from src.data.loader import load_all
 from src.models.predictor import MatchPredictor
 from src.data.sporttery_scraper import SportteryScraper, odds_to_win_probability
 from src.data.odds_scraper import get_odds_scraper
+from src.data.live_data import get_live_fetcher
 from src.utils.viz_helpers import create_champion_bar_chart, create_confederation_pie
 from src.utils.config import TEAMS, GROUPS
 
 # ── 页面设置 ────────────────────────────────────────
 st.set_page_config(page_title="2026 世界杯预测工具", page_icon="🏆", layout="wide")
 
-# 自动刷新（10分钟）
-st_autorefresh(interval=600000, key="main_autorefresh")
+# 自动刷新（1分钟）
+st_autorefresh(interval=60000, key="main_autorefresh")
 
 # ── 样式 ───────────────────────────────────────────
 st.markdown("""
@@ -77,6 +78,18 @@ live = fetch_live()
 # 数据源信息
 data_source = live.get("source", "sporttery") if live else "none"
 
+@st.cache_data(ttl=60)
+def fetch_live_matches():
+    """获取实时比赛数据（每分钟更新）"""
+    try:
+        fetcher = get_live_fetcher()
+        return fetcher.get_live_matches()
+    except Exception as e:
+        logger.warning(f"实时数据获取失败: {e}")
+        return []
+
+live_matches = fetch_live_matches()
+
 # ── 常量 ───────────────────────────────────────────
 TOURNAMENT_START = date(2026, 6, 12)
 TOURNAMENT_END = date(2026, 7, 20)
@@ -108,14 +121,31 @@ with st.sidebar:
     st.markdown(f"**主办国：** 🇺🇸 美国 · 🇨🇦 加拿大 · 🇲🇽 墨西哥")
     st.markdown(f"**参赛队伍：** 48 支 · 12 组 · 104 场比赛")
 
-    if live:
+    # 实时比赛状态
+    if live_matches:
+        live_count = len([m for m in live_matches if m.get("status") == "live"])
+        finished_count = len([m for m in live_matches if m.get("status") == "finished"])
+        scheduled_count = len([m for m in live_matches if m.get("status") == "scheduled"])
+        st.markdown(f"**实时状态：** 🔴进行中 {live_count} · ✅已完场 {finished_count} · ⏳未开赛 {scheduled_count}")
+
+        # 显示正在进行的比赛
+        live_now = [m for m in live_matches if m.get("status") == "live"]
+        if live_now:
+            st.markdown("**🔴 正在进行：**")
+            for match in live_now:
+                home = match.get("home_team", "")
+                away = match.get("away_team", "")
+                score = f"{match.get('home_score', 0)} - {match.get('away_score', 0)}"
+                minute = match.get("minute", "")
+                st.markdown(f"- {home} {score} {away} ({minute}')")
+    elif live:
         c = len(live.get("completed", []))
         l = len(live.get("live_today", []))
         u = len(live.get("upcoming", []))
         st.markdown(f"**状态：** ✅已完场 {c} · 🔴进行中 {l} · ⏳未开赛 {u}")
 
     st.markdown("---")
-    st.caption(f"🔄 每10分钟自动刷新 | {now_beijing.strftime('%H:%M:%S')} (北京时间)")
+    st.caption(f"🔄 每1分钟自动刷新 | {now_beijing.strftime('%H:%M:%S')} (北京时间)")
 
 # ── 头部 ──────────────────────────────────────────
 schedule = data["schedule"]
@@ -235,6 +265,74 @@ if not schedule.empty:
                 """, unsafe_allow_html=True)
 else:
     st.info("暂无赛程数据。")
+
+# ── 实时比赛 ─────────────────────────────────────────
+if live_matches:
+    st.markdown("---")
+    st.subheader("🔴 实时比赛")
+
+    # 正在进行的比赛
+    live_now = [m for m in live_matches if m.get("status") == "live"]
+    if live_now:
+        st.markdown("**🔴 正在进行中**")
+        for match in live_now:
+            home = match.get("home_team", "")
+            away = match.get("away_team", "")
+            home_score = match.get("home_score", 0)
+            away_score = match.get("away_score", 0)
+            minute = match.get("minute", "")
+            status_detail = match.get("status_detail", "")
+            events = match.get("events", [])
+
+            # 获取队伍旗帜
+            home_flag = TEAMS.get(home, {}).get("flag", "⚽")
+            away_flag = TEAMS.get(away, {}).get("flag", "⚽")
+
+            # 构建事件文本
+            events_text = ""
+            if events:
+                goals = [e for e in events if e.get("type") == "goal"]
+                if goals:
+                    events_text = "⚽ " + "、".join([f"{e.get('player', '')} ({e.get('minute', '')}')" for e in goals])
+
+            st.markdown(f"""
+            <div style="background:#1e293b;padding:1rem;border-radius:0.5rem;margin-bottom:1rem;border-left:4px solid #ef4444;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <b style="font-size:1.2em;">{home_flag} {home}</b>
+                        <span style="font-size:1.5em;font-weight:bold;margin:0 1rem;color:#fbbf24;">{home_score} - {away_score}</span>
+                        <b style="font-size:1.2em;">{away} {away_flag}</b>
+                    </div>
+                    <div style="text-align:right;">
+                        <span style="color:#ef4444;font-weight:bold;">🔴 {minute}'</span><br>
+                        <small style="color:#94a3b8;">{status_detail}</small>
+                    </div>
+                </div>
+                {f'<div style="margin-top:0.5rem;color:#94a3b8;">{events_text}</div>' if events_text else ''}
+            </div>
+            """, unsafe_allow_html=True)
+
+    # 刚结束的比赛
+    finished = [m for m in live_matches if m.get("status") == "finished"]
+    if finished:
+        st.markdown("**✅ 已结束**")
+        for match in finished[:5]:  # 只显示最近 5 场
+            home = match.get("home_team", "")
+            away = match.get("away_team", "")
+            home_score = match.get("home_score", 0)
+            away_score = match.get("away_score", 0)
+
+            home_flag = TEAMS.get(home, {}).get("flag", "⚽")
+            away_flag = TEAMS.get(away, {}).get("flag", "⚽")
+
+            st.markdown(f"""
+            <div style="background:#1e293b;padding:0.8rem;border-radius:0.5rem;margin-bottom:0.5rem;">
+                <b>{home_flag} {home}</b>
+                <span style="font-size:1.2em;font-weight:bold;margin:0 0.5rem;">{home_score} - {away_score}</span>
+                <b>{away} {away_flag}</b>
+                <span style="color:#94a3b8;margin-left:0.5rem;">✅ 已结束</span>
+            </div>
+            """, unsafe_allow_html=True)
 
 st.markdown("---")
 
