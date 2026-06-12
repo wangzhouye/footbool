@@ -26,6 +26,31 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
+# ── 队伍名称映射 ─────────────────────────────────────
+# ESPN API 返回的名称 -> TEAMS 配置中的名称
+TEAM_NAME_MAP = {
+    "Bosnia-Herzegovina": "Bosnia",
+    "United States": "USA",
+    "USA": "USA",
+    "South Korea": "South Korea",
+    "Korea Republic": "South Korea",
+    "Czech Republic": "Czech Republic",
+    "Czechia": "Czech Republic",
+    "Türkiye": "Turkey",
+    "Turkey": "Turkey",
+    "Ivory Coast": "Ivory Coast",
+    "Côte d'Ivoire": "Ivory Coast",
+    "DR Congo": "DR Congo",
+    "Congo DR": "DR Congo",
+    "Curacao": "Curacao",
+    "Curaçao": "Curacao",
+    "New Zealand": "New Zealand",
+}
+
+def normalize_team_name(name: str) -> str:
+    """标准化队伍名称"""
+    return TEAM_NAME_MAP.get(name, name)
+
 # ── 数据源配置 ─────────────────────────────────────
 # ESPN API（美国本地）
 ESPN_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer"
@@ -241,8 +266,14 @@ class LiveDataFetcher:
             match_status = "live"
         elif status_type == "STATUS_FINAL":
             match_status = "finished"
+        elif status_type == "STATUS_HALFTIME":
+            match_status = "live"  # 半场休息也算进行中
         else:
-            match_status = "scheduled"
+            # 检查是否有比赛时间，如果有则认为是进行中
+            if minute and minute != "0" and "'" in str(minute):
+                match_status = "live"
+            else:
+                match_status = "scheduled"
 
         # 获取事件（进球等）
         events = []
@@ -276,8 +307,8 @@ class LiveDataFetcher:
 
         return {
             "match_id": event.get("id", ""),
-            "home_team": home.get("team", {}).get("displayName", ""),
-            "away_team": away.get("team", {}).get("displayName", ""),
+            "home_team": normalize_team_name(home.get("team", {}).get("displayName", "")),
+            "away_team": normalize_team_name(away.get("team", {}).get("displayName", "")),
             "home_score": home_score,
             "away_score": away_score,
             "status": match_status,
