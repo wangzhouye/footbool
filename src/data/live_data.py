@@ -27,8 +27,19 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 # ── 数据源配置 ─────────────────────────────────────
+# ESPN API（美国本地）
 ESPN_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer"
 ESPN_WORLD_CUP = f"{ESPN_BASE_URL}/fifa.world.cup/scoreboard"
+ESPN_MENS_WORLD_CUP = f"{ESPN_BASE_URL}/fifa.world/scoreboard"
+
+# Fox Sports API（美国转播商）
+FOX_SPORTS_URL = "https://api.foxsports.com/sports/v1/soccer/worldcup/scores"
+
+# CBS Sports API（美国体育媒体）
+CBS_SPORTS_URL = "https://www.cbssports.com/api/sports/soccer/worldcup/scores"
+
+# Yahoo Sports API
+YAHOO_SPORTS_URL = "https://sports.yahoo.com/api/sports/soccer/worldcup/scores"
 
 SOFASCORE_BASE_URL = "https://api.sofascore.com/api/v1"
 SOFASCORE_WORLD_CUP = f"{SOFASCORE_BASE_URL}/unique-tournament/16/season/52186/events"
@@ -93,7 +104,7 @@ class LiveDataFetcher:
         logger.info("正在获取实时比赛数据...")
         errors = []
 
-        # 尝试 ESPN API
+        # 尝试 ESPN API（美国本地）
         try:
             matches = self._fetch_from_espn()
             if matches:
@@ -106,7 +117,46 @@ class LiveDataFetcher:
             logger.warning(error_msg)
             errors.append(error_msg)
 
-        # 尝试 SofaScore API
+        # 尝试 ESPN Men's World Cup（备用）
+        try:
+            matches = self._fetch_from_espn_mens()
+            if matches:
+                logger.info(f"从 ESPN Men's 获取到 {len(matches)} 场比赛")
+                return matches
+            else:
+                logger.info("ESPN Men's API 返回空数据（可能当前无比赛）")
+        except Exception as e:
+            error_msg = f"ESPN Men's API 失败: {e}"
+            logger.warning(error_msg)
+            errors.append(error_msg)
+
+        # 尝试 Fox Sports API（美国转播商）
+        try:
+            matches = self._fetch_from_foxsports()
+            if matches:
+                logger.info(f"从 Fox Sports 获取到 {len(matches)} 场比赛")
+                return matches
+            else:
+                logger.info("Fox Sports API 返回空数据（可能当前无比赛）")
+        except Exception as e:
+            error_msg = f"Fox Sports API 失败: {e}"
+            logger.warning(error_msg)
+            errors.append(error_msg)
+
+        # 尝试 CBS Sports API（美国体育媒体）
+        try:
+            matches = self._fetch_from_cbssports()
+            if matches:
+                logger.info(f"从 CBS Sports 获取到 {len(matches)} 场比赛")
+                return matches
+            else:
+                logger.info("CBS Sports API 返回空数据（可能当前无比赛）")
+        except Exception as e:
+            error_msg = f"CBS Sports API 失败: {e}"
+            logger.warning(error_msg)
+            errors.append(error_msg)
+
+        # 尝试 SofaScore API（国际）
         try:
             matches = self._fetch_from_sofascore()
             if matches:
@@ -119,7 +169,7 @@ class LiveDataFetcher:
             logger.warning(error_msg)
             errors.append(error_msg)
 
-        # 尝试 API-Football（免费端点）
+        # 尝试 API-Football（备用）
         try:
             matches = self._fetch_from_apifootball()
             if matches:
@@ -342,6 +392,189 @@ class LiveDataFetcher:
             logger.warning(f"获取比赛详情失败: {e}")
 
         return None
+
+    def _fetch_from_espn_mens(self) -> List[Dict]:
+        """从 ESPN Men's World Cup API 获取数据"""
+        response = self.session.get(ESPN_MENS_WORLD_CUP, timeout=10)
+
+        if response.status_code != 200:
+            raise Exception(f"ESPN Men's API 返回状态码: {response.status_code}")
+
+        data = response.json()
+        matches = []
+
+        for event in data.get("events", []):
+            try:
+                match = self._parse_espn_event(event)
+                if match:
+                    matches.append(match)
+            except Exception as e:
+                logger.debug(f"解析 ESPN Men's 事件失败: {e}")
+                continue
+
+        return matches
+
+    def _fetch_from_foxsports(self) -> List[Dict]:
+        """从 Fox Sports API 获取数据"""
+        headers = {
+            **HEADERS,
+            "Origin": "https://www.foxsports.com",
+            "Referer": "https://www.foxsports.com/soccer/world-cup",
+        }
+
+        response = self.session.get(FOX_SPORTS_URL, headers=headers, timeout=10)
+
+        if response.status_code != 200:
+            raise Exception(f"Fox Sports API 返回状态码: {response.status_code}")
+
+        data = response.json()
+        matches = []
+
+        for game in data.get("games", []):
+            try:
+                match = self._parse_foxsports_game(game)
+                if match:
+                    matches.append(match)
+            except Exception as e:
+                logger.debug(f"解析 Fox Sports 比赛失败: {e}")
+                continue
+
+        return matches
+
+    def _parse_foxsports_game(self, game: Dict) -> Optional[Dict]:
+        """解析 Fox Sports 比赛数据"""
+        teams = game.get("teams", {})
+        if len(teams) != 2:
+            return None
+
+        home = next((t for t in teams if t.get("homeAway") == "home"), None)
+        away = next((t for t in teams if t.get("homeAway") == "away"), None)
+
+        if not home or not away:
+            return None
+
+        home_team = home.get("name", "")
+        away_team = away.get("name", "")
+        home_score = home.get("score", 0)
+        away_score = away.get("score", 0)
+
+        # 比赛状态
+        status = game.get("status", {})
+        status_type = status.get("type", "")
+        minute = status.get("minute", 0)
+
+        if status_type == "in_progress":
+            match_status = "live"
+        elif status_type == "final":
+            match_status = "finished"
+        else:
+            match_status = "scheduled"
+
+        status_detail = status.get("detail", "")
+
+        # 获取事件
+        events = []
+        for event in game.get("events", []):
+            event_type = event.get("type", "")
+            team = "home" if event.get("teamId") == home.get("id") else "away"
+            player = event.get("playerName", "")
+            event_minute = event.get("minute", 0)
+
+            if event_type == "goal":
+                events.append({
+                    "type": "goal",
+                    "team": team,
+                    "player": player,
+                    "minute": event_minute,
+                })
+
+        return {
+            "match_id": str(game.get("id", "")),
+            "home_team": home_team,
+            "away_team": away_team,
+            "home_score": home_score,
+            "away_score": away_score,
+            "status": match_status,
+            "status_detail": status_detail,
+            "minute": minute,
+            "events": events,
+            "start_time": game.get("startTime", ""),
+            "venue": game.get("venue", {}).get("name", ""),
+            "source": "foxsports",
+        }
+
+    def _fetch_from_cbssports(self) -> List[Dict]:
+        """从 CBS Sports API 获取数据"""
+        headers = {
+            **HEADERS,
+            "Origin": "https://www.cbssports.com",
+            "Referer": "https://www.cbssports.com/soccer/world-cup/",
+        }
+
+        response = self.session.get(CBS_SPORTS_URL, headers=headers, timeout=10)
+
+        if response.status_code != 200:
+            raise Exception(f"CBS Sports API 返回状态码: {response.status_code}")
+
+        data = response.json()
+        matches = []
+
+        for game in data.get("games", []):
+            try:
+                match = self._parse_cbssports_game(game)
+                if match:
+                    matches.append(match)
+            except Exception as e:
+                logger.debug(f"解析 CBS Sports 比赛失败: {e}")
+                continue
+
+        return matches
+
+    def _parse_cbssports_game(self, game: Dict) -> Optional[Dict]:
+        """解析 CBS Sports 比赛数据"""
+        teams = game.get("teams", [])
+        if len(teams) != 2:
+            return None
+
+        home = next((t for t in teams if t.get("homeAway") == "home"), None)
+        away = next((t for t in teams if t.get("homeAway") == "away"), None)
+
+        if not home or not away:
+            return None
+
+        home_team = home.get("name", "")
+        away_team = away.get("name", "")
+        home_score = home.get("score", 0)
+        away_score = away.get("score", 0)
+
+        # 比赛状态
+        status = game.get("status", {})
+        status_type = status.get("type", "")
+        minute = status.get("minute", 0)
+
+        if status_type == "in_progress":
+            match_status = "live"
+        elif status_type == "final":
+            match_status = "finished"
+        else:
+            match_status = "scheduled"
+
+        status_detail = status.get("detail", "")
+
+        return {
+            "match_id": str(game.get("id", "")),
+            "home_team": home_team,
+            "away_team": away_team,
+            "home_score": home_score,
+            "away_score": away_score,
+            "status": match_status,
+            "status_detail": status_detail,
+            "minute": minute,
+            "events": [],
+            "start_time": game.get("startTime", ""),
+            "venue": game.get("venue", {}).get("name", ""),
+            "source": "cbssports",
+        }
 
     def _fetch_from_apifootball(self) -> List[Dict]:
         """从 API-Football 免费端点获取"""

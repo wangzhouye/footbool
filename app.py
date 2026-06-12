@@ -109,7 +109,7 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("🔧 API 测试")
 
-        if st.button("测试 ESPN API"):
+        if st.button("测试 ESPN API（美国）"):
             try:
                 import requests
                 response = requests.get(
@@ -125,7 +125,51 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"❌ ESPN API 连接失败: {e}")
 
-        if st.button("测试 SofaScore API"):
+        if st.button("测试 Fox Sports API（美国）"):
+            try:
+                import requests
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Origin": "https://www.foxsports.com",
+                    "Referer": "https://www.foxsports.com/soccer/world-cup",
+                }
+                response = requests.get(
+                    "https://api.foxsports.com/sports/v1/soccer/worldcup/scores",
+                    headers=headers,
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    games = data.get("games", [])
+                    st.success(f"✅ Fox Sports API 可用，返回 {len(games)} 场比赛")
+                else:
+                    st.error(f"❌ Fox Sports API 返回状态码: {response.status_code}")
+            except Exception as e:
+                st.error(f"❌ Fox Sports API 连接失败: {e}")
+
+        if st.button("测试 CBS Sports API（美国）"):
+            try:
+                import requests
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Origin": "https://www.cbssports.com",
+                    "Referer": "https://www.cbssports.com/soccer/world-cup/",
+                }
+                response = requests.get(
+                    "https://www.cbssports.com/api/sports/soccer/worldcup/scores",
+                    headers=headers,
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    games = data.get("games", [])
+                    st.success(f"✅ CBS Sports API 可用，返回 {len(games)} 场比赛")
+                else:
+                    st.error(f"❌ CBS Sports API 返回状态码: {response.status_code}")
+            except Exception as e:
+                st.error(f"❌ CBS Sports API 连接失败: {e}")
+
+        if st.button("测试 SofaScore API（国际）"):
             try:
                 import requests
                 response = requests.get(
@@ -142,7 +186,7 @@ with st.sidebar:
                 st.error(f"❌ SofaScore API 连接失败: {e}")
 
         st.markdown("---")
-        st.info("如果 API 测试失败，说明 Streamlit Cloud 服务器无法访问这些 API")
+        st.info("如果所有 API 测试都失败，说明 Streamlit Cloud 服务器无法访问这些 API")
 
 # ── 常量 ───────────────────────────────────────────
 TOURNAMENT_START = date(2026, 6, 12)
