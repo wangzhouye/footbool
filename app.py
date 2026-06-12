@@ -4,8 +4,11 @@
 """
 
 import sys, os, math
+import logging
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from collections import defaultdict
+
+logger = logging.getLogger(__name__)
 
 import streamlit as st
 import pandas as pd
