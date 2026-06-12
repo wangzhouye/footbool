@@ -86,12 +86,24 @@ def fetch_live_matches():
     """获取实时比赛数据（每分钟更新）"""
     try:
         fetcher = get_live_fetcher()
-        return fetcher.get_live_matches()
+        matches = fetcher.get_live_matches()
+        if matches:
+            logger.info(f"成功获取 {len(matches)} 场实时比赛")
+        else:
+            logger.warning("未获取到实时比赛数据")
+        return matches
     except Exception as e:
-        logger.warning(f"实时数据获取失败: {e}")
+        logger.error(f"实时数据获取失败: {e}")
         return []
 
 live_matches = fetch_live_matches()
+
+# 调试信息（侧边栏显示）
+with st.sidebar:
+    if live_matches:
+        st.success(f"✅ 实时数据已加载：{len(live_matches)} 场比赛")
+    else:
+        st.warning("⚠️ 实时数据未加载（可能原因：无比赛或API无法访问）")
 
 # ── 常量 ───────────────────────────────────────────
 TOURNAMENT_START = date(2026, 6, 12)
