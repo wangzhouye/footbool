@@ -236,6 +236,16 @@ with st.sidebar:
                 score = f"{match.get('home_score', 0)} - {match.get('away_score', 0)}"
                 minute = match.get("minute", "")
                 st.markdown(f"- {home} {score} {away} ({minute}')")
+
+        # 显示已结束的比赛
+        finished_now = [m for m in live_matches if m.get("status") == "finished"]
+        if finished_now:
+            st.markdown("**✅ 已结束：**")
+            for match in finished_now:
+                home = match.get("home_team", "")
+                away = match.get("away_team", "")
+                score = f"{match.get('home_score', 0)} - {match.get('away_score', 0)}"
+                st.markdown(f"- {home} {score} {away}")
     elif live:
         c = len(live.get("completed", []))
         l = len(live.get("live_today", []))
