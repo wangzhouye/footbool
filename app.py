@@ -369,6 +369,9 @@ if live_matches:
     st.markdown("---")
     st.subheader("🔴 实时比赛")
 
+    # 显示所有比赛（调试用）
+    st.markdown(f"**共 {len(live_matches)} 场比赛**")
+
     # 正在进行的比赛
     live_now = [m for m in live_matches if m.get("status") == "live"]
     if live_now:
@@ -431,6 +434,12 @@ if live_matches:
                 <span style="color:#94a3b8;margin-left:0.5rem;">✅ 已结束</span>
             </div>
             """, unsafe_allow_html=True)
+
+    # 显示所有比赛详情（调试用）
+    with st.expander("📊 查看所有比赛数据（调试）"):
+        for i, match in enumerate(live_matches):
+            st.markdown(f"**比赛 {i+1}:**")
+            st.json(match)
 
 st.markdown("---")
 
