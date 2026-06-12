@@ -110,6 +110,15 @@ class LiveDataFetcher:
         except Exception as e:
             logger.warning(f"SofaScore API 失败: {e}")
 
+        # 尝试 API-Football（免费端点）
+        try:
+            matches = self._fetch_from_apifootball()
+            if matches:
+                logger.info(f"从 API-Football 获取到 {len(matches)} 场比赛")
+                return matches
+        except Exception as e:
+            logger.warning(f"API-Football 失败: {e}")
+
         # 返回空列表
         logger.warning("所有数据源都失败")
         return []
@@ -316,6 +325,128 @@ class LiveDataFetcher:
             logger.warning(f"获取比赛详情失败: {e}")
 
         return None
+
+    def _fetch_from_apifootball(self) -> List[Dict]:
+        """从 API-Football 免费端点获取"""
+        # API-Football 提供免费的世界杯数据
+        url = "https://v3.football.api-sports.io/fixtures"
+        params = {
+            "league": 1,  # FIFA World Cup
+            "season": 2026,
+            "live": "all",
+        }
+
+        # 注意：这个 API 需要 API Key，但我们可以尝试无 Key 访问
+        # 如果失败，会抛出异常，然后尝试下一个数据源
+        response = self.session.get(url, params=params, timeout=10)
+
+        if response.status_code == 200:
+            data = response.json()
+            matches = []
+
+            for fixture in data.get("response", []):
+                try:
+                    match = self._parse_apifootball_fixture(fixture)
+                    if match:
+                        matches.append(match)
+                except Exception as e:
+                    logger.debug(f"解析 API-Football 比赛失败: {e}")
+                    continue
+
+            return matches
+
+        raise Exception(f"API-Football 返回状态码: {response.status_code}")
+
+    def _parse_apifootball_fixture(self, fixture: Dict) -> Optional[Dict]:
+        """解析 API-Football 比赛数据"""
+        teams = fixture.get("teams", {})
+        goals = fixture.get("goals", {})
+        status = fixture.get("status", {})
+
+        home_team = teams.get("home", {}).get("name", "")
+        away_team = teams.get("away", {}).get("name", "")
+
+        if not home_team or not away_team:
+            return None
+
+        home_score = goals.get("home", 0) or 0
+        away_score = goals.get("away", 0) or 0
+
+        # 比赛状态
+        status_short = status.get("short", "")
+        status_elapsed = status.get("elapsed", 0)
+
+        if status_short == "1H" or status_short == "2H" or status_short == "ET":
+            match_status = "live"
+        elif status_short == "FT" or status_short == "AET" or status_short == "PEN":
+            match_status = "finished"
+        else:
+            match_status = "scheduled"
+
+        # 状态描述
+        status_detail = {
+            "1H": "1st Half",
+            "HT": "Half Time",
+            "2H": "2nd Half",
+            "ET": "Extra Time",
+            "P": "Penalties",
+            "FT": "Full Time",
+            "AET": "After Extra Time",
+            "PEN": "After Penalties",
+            "NS": "Not Started",
+            "PST": "Postponed",
+            "CANC": "Cancelled",
+            "ABD": "Abandoned",
+            "AWD": "Awarded",
+            "WO": "Walkover",
+        }.get(status_short, status_short)
+
+        # 获取事件（进球等）
+        events = []
+        for event in fixture.get("events", []):
+            event_type = event.get("type", "")
+            team = "home" if event.get("team", {}).get("name") == home_team else "away"
+            player = event.get("player", {}).get("name", "")
+            minute = event.get("time", {}).get("elapsed", 0)
+
+            if event_type == "Goal":
+                events.append({
+                    "type": "goal",
+                    "team": team,
+                    "player": player,
+                    "minute": minute,
+                })
+            elif event_type == "Card":
+                card_type = event.get("detail", "")
+                if "Yellow" in card_type:
+                    events.append({
+                        "type": "yellow_card",
+                        "team": team,
+                        "player": player,
+                        "minute": minute,
+                    })
+                elif "Red" in card_type:
+                    events.append({
+                        "type": "red_card",
+                        "team": team,
+                        "player": player,
+                        "minute": minute,
+                    })
+
+        return {
+            "match_id": str(fixture.get("fixture", {}).get("id", "")),
+            "home_team": home_team,
+            "away_team": away_team,
+            "home_score": home_score,
+            "away_score": away_score,
+            "status": match_status,
+            "status_detail": status_detail,
+            "minute": status_elapsed,
+            "events": events,
+            "start_time": fixture.get("fixture", {}).get("date", ""),
+            "venue": fixture.get("fixture", {}).get("venue", {}).get("name", ""),
+            "source": "apifootball",
+        }
 
 
 def get_live_fetcher() -> LiveDataFetcher:
