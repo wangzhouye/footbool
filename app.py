@@ -237,23 +237,7 @@ with st.sidebar:
 
     if live:
         n = len(live.get("all_odds", []))
-        source_name = {
-            "multi_source": "多数据源聚合",
-            "mixed": "Odds Portal + 中国竞彩网",
-            "oddsportal": "Odds Portal",
-            "odds_api": "The Odds API",
-            "sporttery": "中国竞彩网",
-        }.get(live.get("source"), "赔率数据")
-        st.markdown(f"🟢 **{source_name}已连接** — {n} 场比赛")
-
-        # 显示赔率数据详情
-        if live.get("all_odds"):
-            with st.expander("📊 赔率数据详情"):
-                for m in live["all_odds"]:
-                    home = m.get("home_team", "")
-                    away = m.get("away_team", "")
-                    odds = m.get("odds_had", {})
-                    st.markdown(f"- {home} vs {away}: {odds}")
+        st.markdown(f"🟢 **赔率数据已连接** — {n} 场比赛")
     else:
         st.markdown("🔴 赔率数据未连接")
 
@@ -432,26 +416,16 @@ if live_matches:
     # 正在进行的比赛
     live_now = [m for m in live_matches if m.get("status") == "live"]
     if live_now:
-        st.markdown("**🔴 正在进行中**")
         for match in live_now:
             home = match.get("home_team", "")
             away = match.get("away_team", "")
             home_score = match.get("home_score", 0)
             away_score = match.get("away_score", 0)
             minute = match.get("minute", "")
-            status_detail = match.get("status_detail", "")
-            events = match.get("events", [])
 
             # 获取队伍旗帜
             home_flag = TEAMS.get(home, {}).get("flag", "⚽")
             away_flag = TEAMS.get(away, {}).get("flag", "⚽")
-
-            # 构建事件文本
-            events_text = ""
-            if events:
-                goals = [e for e in events if e.get("type") == "goal"]
-                if goals:
-                    events_text = "⚽ " + "、".join([f"{e.get('player', '')} ({e.get('minute', '')}')" for e in goals])
 
             st.markdown(f"""
             <div style="background:#1e293b;padding:1rem;border-radius:0.5rem;margin-bottom:1rem;border-left:4px solid #ef4444;">
@@ -462,19 +436,16 @@ if live_matches:
                         <b style="font-size:1.2em;">{away} {away_flag}</b>
                     </div>
                     <div style="text-align:right;">
-                        <span style="color:#ef4444;font-weight:bold;">🔴 {minute}'</span><br>
-                        <small style="color:#94a3b8;">{status_detail}</small>
+                        <span style="color:#ef4444;font-weight:bold;">🔴 {minute}'</span>
                     </div>
                 </div>
-                {f'<div style="margin-top:0.5rem;color:#94a3b8;">{events_text}</div>' if events_text else ''}
             </div>
             """, unsafe_allow_html=True)
 
     # 刚结束的比赛
     finished = [m for m in live_matches if m.get("status") == "finished"]
     if finished:
-        st.markdown("**✅ 已结束**")
-        for match in finished[:5]:  # 只显示最近 5 场
+        for match in finished[:5]:
             home = match.get("home_team", "")
             away = match.get("away_team", "")
             home_score = match.get("home_score", 0)
@@ -491,64 +462,10 @@ if live_matches:
                 <span style="color:#94a3b8;margin-left:0.5rem;">✅ 已结束</span>
             </div>
             """, unsafe_allow_html=True)
-
-    # 未开始的比赛
-    scheduled = [m for m in live_matches if m.get("status") == "scheduled"]
-    if scheduled:
-        st.markdown("**⏳ 未开始**")
-        for match in scheduled[:5]:  # 只显示最近 5 场
-            home = match.get("home_team", "")
-            away = match.get("away_team", "")
-            start_time = match.get("start_time", "")
-
-            home_flag = TEAMS.get(home, {}).get("flag", "⚽")
-            away_flag = TEAMS.get(away, {}).get("flag", "⚽")
-
-            # 解析开始时间
-            try:
-                if start_time:
-                    dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-                    time_str = dt.strftime("%H:%M")
-                else:
-                    time_str = "待定"
-            except:
-                time_str = "待定"
-
-            st.markdown(f"""
-            <div style="background:#1e293b;padding:0.8rem;border-radius:0.5rem;margin-bottom:0.5rem;">
-                <b>{home_flag} {home}</b>
-                <span style="font-size:1.2em;font-weight:bold;margin:0 0.5rem;">vs</span>
-                <b>{away} {away_flag}</b>
-                <span style="color:#94a3b8;margin-left:0.5rem;">⏳ {time_str}</span>
-            </div>
-            """, unsafe_allow_html=True)
 else:
     st.markdown("---")
     st.subheader("🔴 实时比赛")
-    st.warning("⚠️ 未获取到实时比赛数据")
-
-    # 显示调试信息
-    with st.expander("🔧 调试信息"):
-        st.markdown("**可能原因：**")
-        st.markdown("1. ESPN API 无法访问")
-        st.markdown("2. 当前无比赛")
-        st.markdown("3. 网络连接问题")
-
-        if st.button("测试 ESPN API"):
-            try:
-                import requests
-                response = requests.get(
-                    "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world.cup/scoreboard",
-                    timeout=10
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    events = data.get("events", [])
-                    st.success(f"✅ ESPN API 可用，返回 {len(events)} 场比赛")
-                else:
-                    st.error(f"❌ ESPN API 返回状态码: {response.status_code}")
-            except Exception as e:
-                st.error(f"❌ ESPN API 连接失败: {e}")
+    st.info("暂无正在进行的比赛")
 
 st.markdown("---")
 
