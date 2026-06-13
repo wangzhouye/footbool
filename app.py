@@ -43,15 +43,21 @@ h2, h3 { color: #e2e8f0 !important; }
 """, unsafe_allow_html=True)
 
 # ── 加载数据 ───────────────────────────────────────
+@st.cache_data(ttl=600)
+def load_schedule_data():
+    """加载赛程数据（10分钟更新）"""
+    return load_all()
+
+data = load_schedule_data()
+
 @st.cache_resource
-def init():
-    data = load_all()
+def init_predictor():
     pred = MatchPredictor()
     if not data["historical"].empty:
         pred.load_historical_data(data["historical"])
-    return pred, data
+    return pred
 
-predictor, data = init()
+predictor = init_predictor()
 
 @st.cache_data(ttl=30)
 def fetch_live():
@@ -129,6 +135,19 @@ def fetch_live_matches():
         return []
 
 live_matches = fetch_live_matches()
+
+# 如果实时数据不足，使用赛程数据补充
+if live_matches and len(live_matches) < 4:
+    # 获取所有比赛日期
+    all_dates = set()
+    if not data["schedule"].empty:
+        for _, row in data["schedule"].iterrows():
+            d = row["match_date"].strftime("%Y-%m-%d") if hasattr(row["match_date"], "strftime") else str(row["match_date"])
+            all_dates.add(d)
+
+    # 检查是否有遗漏的比赛
+    live_match_keys = {f"{m.get('home_team', '')}|{m.get('away_team', '')}" for m in live_matches}
+    logger.info(f"实时数据有 {len(live_matches)} 场比赛，赛程有 {len(all_dates)} 个比赛日")
 
 # 调试信息（侧边栏显示）
 with st.sidebar:
