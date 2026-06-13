@@ -13,6 +13,7 @@ from .elo import EloEngine
 from .poisson_model import PoissonModel
 from .form_calculator import get_form_calculator
 from .fifa_rankings import get_fifa_data
+from .squad_data import get_squad_data
 from ..data.preprocessor import compute_attack_defense_strengths
 from ..utils.config import FORM_WEIGHT
 
@@ -33,6 +34,7 @@ class MatchPredictor:
         self.poisson = PoissonModel(rho=-0.08)
         self.form_calculator = get_form_calculator()
         self.fifa_data = get_fifa_data()
+        self.squad_data = get_squad_data()
         self.historical_df: Optional[pd.DataFrame] = None
         self._trained = False
         self._prediction_cache = {}  # 预测结果缓存
@@ -87,7 +89,9 @@ class MatchPredictor:
         )
 
     def predict(self, home_team: str, away_team: str,
-                neutral: bool = True, match_importance: str = "World Cup") -> Dict:
+                neutral: bool = True, match_importance: str = "World Cup",
+                injured_players: List[str] = None,
+                suspended_players: List[str] = None) -> Dict:
         """
         Predict a single match.
 
@@ -96,6 +100,8 @@ class MatchPredictor:
             away_team: Name of away/nominal away team
             neutral: True if match is at neutral venue
             match_importance: 比赛重要性 ("World Cup", "Qualifier", "Friendly")
+            injured_players: 受伤球员列表
+            suspended_players: 停赛球员列表
 
         Returns:
             Dict with all prediction details
@@ -129,6 +135,14 @@ class MatchPredictor:
 
         # 计算历史交锋权重
         h2h_weight = self._compute_h2h_weight(home_team, away_team)
+
+        # 计算阵容影响
+        home_squad = self.squad_data.calculate_squad_impact(
+            home_team, injured_players, suspended_players
+        )
+        away_squad = self.squad_data.calculate_squad_impact(
+            away_team, injured_players, suspended_players
+        )
 
         # 动态权重调整
         weights = self._compute_dynamic_weights(
@@ -190,6 +204,11 @@ class MatchPredictor:
             "under_2_5": poisson_probs["under_2_5"],
             "btts_yes": poisson_probs["btts_yes"],
             "btts_no": poisson_probs["btts_no"],
+            # Squad info
+            "home_squad": home_squad,
+            "away_squad": away_squad,
+            "home_key_players": [p.name for p in self.squad_data.get_key_players(home_team)],
+            "away_key_players": [p.name for p in self.squad_data.get_key_players(away_team)],
             # Model details
             "weights": weights,
             "form_weight": form_weight,
