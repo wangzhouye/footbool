@@ -18,6 +18,7 @@ from .loader import load_all
 from .sporttery_scraper import SportteryScraper, odds_to_win_probability
 from .odds_scraper import get_odds_scraper
 from .live_data import get_live_fetcher
+from .squad_fetcher import get_squad_fetcher
 from ..utils.config import TEAMS
 
 logger = logging.getLogger(__name__)
@@ -180,3 +181,25 @@ def get_finished_count(schedule: pd.DataFrame, live_matches: List[Dict]) -> int:
     finished_count += today_finished
 
     return finished_count
+
+
+@st.cache_data(ttl=3600)
+def fetch_team_squad(team: str) -> List[Dict]:
+    """获取球队阵容数据（1小时缓存）"""
+    try:
+        fetcher = get_squad_fetcher()
+        return fetcher.get_team_squad(team)
+    except Exception as e:
+        logger.warning(f"获取 {team} 阵容失败: {e}")
+        return []
+
+
+@st.cache_data(ttl=3600)
+def fetch_match_squads(home_team: str, away_team: str) -> Dict:
+    """获取比赛双方阵容（1小时缓存）"""
+    try:
+        fetcher = get_squad_fetcher()
+        return fetcher.get_match_squad(home_team, away_team)
+    except Exception as e:
+        logger.warning(f"获取 {home_team} vs {away_team} 阵容失败: {e}")
+        return {"home": {"squad": [], "injuries": []}, "away": {"squad": [], "injuries": []}}

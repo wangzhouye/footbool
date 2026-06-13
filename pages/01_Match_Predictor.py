@@ -10,7 +10,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-from src.data.shared import load_schedule_data
+from src.data.shared import load_schedule_data, fetch_match_squads
 from src.models.predictor import MatchPredictor
 from src.utils.viz_helpers import create_win_prob_gauge, create_scoreline_heatmap, create_expected_goals_chart
 from src.utils.config import TEAMS, GROUPS
@@ -158,3 +158,90 @@ else:
         (pred["elo_home"] - min_elo) / max(1, max_elo - min_elo),
         text=f"Elo 差距：{abs(pred['elo_diff']):.0f} 分（{'偏向 ' + home_team if pred['elo_diff'] > 0 else '偏向 ' + away_team if pred['elo_diff'] < 0 else '势均力敌'}）"
     )
+
+    # ── 球队阵容 ────────────────────────────────
+    st.markdown("---")
+    st.subheader("👥 球队阵容")
+
+    # 获取实时阵容数据
+    squads = fetch_match_squads(home_team, away_team)
+    home_squad = squads.get("home", {}).get("squad", [])
+    away_squad = squads.get("away", {}).get("squad", [])
+    home_injuries = squads.get("home", {}).get("injuries", [])
+    away_injuries = squads.get("away", {}).get("injuries", [])
+
+    squad_col1, squad_col2 = st.columns(2)
+
+    with squad_col1:
+        st.markdown(f"**{TEAMS.get(home_team, {}).get('flag', '')} {home_team}**")
+
+        # 关键球员
+        if home_squad:
+            from src.data.squad_fetcher import get_squad_fetcher
+            fetcher = get_squad_fetcher()
+            key_players = fetcher.get_key_players_from_squad(home_squad, top_n=5)
+
+            st.markdown("*关键球员：*")
+            for p in key_players:
+                flag = TEAMS.get(p.get("club", ""), {}).get("flag", "⚽")
+                st.caption(f"- **{p['name']}** ({p['position']}) - {p.get('club', 'N/A')}")
+        else:
+            st.caption("暂无阵容数据")
+
+        # 伤病信息
+        if home_injuries:
+            st.markdown("*伤病：*")
+            for inj in home_injuries:
+                st.caption(f"- ⚠️ {inj['name']} - {inj.get('injury', 'Unknown')}")
+        else:
+            st.caption("✅ 无伤病报告")
+
+    with squad_col2:
+        st.markdown(f"**{TEAMS.get(away_team, {}).get('flag', '')} {away_team}**")
+
+        # 关键球员
+        if away_squad:
+            from src.data.squad_fetcher import get_squad_fetcher
+            fetcher = get_squad_fetcher()
+            key_players = fetcher.get_key_players_from_squad(away_squad, top_n=5)
+
+            st.markdown("*关键球员：*")
+            for p in key_players:
+                flag = TEAMS.get(p.get("club", ""), {}).get("flag", "⚽")
+                st.caption(f"- **{p['name']}** ({p['position']}) - {p.get('club', 'N/A')}")
+        else:
+            st.caption("暂无阵容数据")
+
+        # 伤病信息
+        if away_injuries:
+            st.markdown("*伤病：*")
+            for inj in away_injuries:
+                st.caption(f"- ⚠️ {inj['name']} - {inj.get('injury', 'Unknown')}")
+        else:
+            st.caption("✅ 无伤病报告")
+
+    # 阵容强度对比
+    if pred.get("home_squad") and pred.get("away_squad"):
+        st.markdown("---")
+        st.subheader("📊 阵容强度对比")
+
+        home_strength = pred["home_squad"]["strength"]
+        away_strength = pred["away_squad"]["strength"]
+
+        strength_col1, strength_col2, strength_col3 = st.columns(3)
+        with strength_col1:
+            st.metric(f"{home_team} 阵容强度", f"{home_strength:.2f}")
+        with strength_col2:
+            st.metric(f"{away_team} 阵容强度", f"{away_strength:.2f}")
+        with strength_col3:
+            diff = home_strength - away_strength
+            st.metric("强度差距", f"{diff:+.2f}",
+                      delta=f"偏向 {home_team}" if diff > 0 else f"偏向 {away_team}" if diff < 0 else "势均力敌")
+
+        # 关键球员缺阵影响
+        if pred["home_squad"]["key_missing"] or pred["away_squad"]["key_missing"]:
+            st.markdown("*⚠️ 关键球员缺阵：*")
+            if pred["home_squad"]["key_missing"]:
+                st.caption(f"- {home_team}: {', '.join(pred['home_squad']['key_missing'])}")
+            if pred["away_squad"]["key_missing"]:
+                st.caption(f"- {away_team}: {', '.join(pred['away_squad']['key_missing'])}")
