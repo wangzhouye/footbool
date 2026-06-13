@@ -27,10 +27,17 @@ ESPN_URLS = [
     "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world.cup/scoreboard",
     "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard",
     "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world.cup.2026/scoreboard",
+    # 添加日期参数的端点
+    "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260612",
+    "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260613",
+    # 尝试其他日期格式
+    "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260612-20260613",
 ]
 
 def update_from_espn():
-    """从 ESPN 获取最新赛程和赛果"""
+    """从 ESPN 获取所有比赛数据（包括已结束的）"""
+    all_events = []
+
     for url in ESPN_URLS:
         try:
             response = requests.get(url, timeout=15)
@@ -39,21 +46,34 @@ def update_from_espn():
                 events = data.get("events", [])
 
                 if events:
-                    # 保存到文件
-                    results_file = DATA_DIR / "live_results.json"
-                    with open(results_file, 'w', encoding='utf-8') as f:
-                        json.dump({
-                            'updated_at': datetime.now().isoformat(),
-                            'source': 'espn',
-                            'events': events
-                        }, f, ensure_ascii=False, indent=2)
-
-                    logger.info(f'ESPN 数据: {len(events)} 场比赛 (from {url})')
-                    return events
+                    all_events.extend(events)
+                    logger.info(f'从 {url} 获取到 {len(events)} 场比赛')
             else:
                 logger.warning(f'ESPN API 返回状态码: {response.status_code} ({url})')
         except Exception as e:
             logger.warning(f'ESPN 数据获取失败: {e} ({url})')
+
+    # 去重（根据比赛 ID）
+    seen_ids = set()
+    unique_events = []
+    for event in all_events:
+        event_id = event.get("id")
+        if event_id not in seen_ids:
+            seen_ids.add(event_id)
+            unique_events.append(event)
+
+    if unique_events:
+        # 保存到文件
+        results_file = DATA_DIR / "live_results.json"
+        with open(results_file, 'w', encoding='utf-8') as f:
+            json.dump({
+                'updated_at': datetime.now().isoformat(),
+                'source': 'espn',
+                'events': unique_events
+            }, f, ensure_ascii=False, indent=2)
+
+        logger.info(f'总共获取到 {len(unique_events)} 场比赛')
+        return unique_events
 
     return []
 

@@ -8,7 +8,6 @@ import logging
 import subprocess
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from collections import defaultdict
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +17,12 @@ from datetime import datetime, date
 from zoneinfo import ZoneInfo
 from streamlit_autorefresh import st_autorefresh
 
-from src.data.loader import load_all
+from src.data.shared import (
+    load_schedule_data, fetch_live_odds, fetch_live_matches,
+    build_live_match_map, get_finished_count, normalize_team_name
+)
 from src.models.predictor import MatchPredictor
-from src.data.sporttery_scraper import SportteryScraper, odds_to_win_probability
-from src.data.odds_scraper import get_odds_scraper
-from src.data.odds_sources import get_odds_aggregator
-from src.data.live_data import get_live_fetcher
+from src.data.sporttery_scraper import odds_to_win_probability
 from src.utils.viz_helpers import create_champion_bar_chart, create_confederation_pie
 from src.utils.config import TEAMS, GROUPS
 
@@ -32,35 +31,6 @@ st.set_page_config(page_title="2026 世界杯预测工具", page_icon="🏆", la
 
 # 自动刷新（30秒）
 st_autorefresh(interval=30000, key="main_autorefresh")
-
-# ── 启动时更新数据 ─────────────────────────────────
-@st.cache_data(ttl=7200)  # 2小时缓存
-def update_data_on_startup():
-    """启动时更新数据（每2小时）"""
-    try:
-        script_path = Path(__file__).parent / "scheduled_update.py"
-        if script_path.exists():
-            logger.info("启动时更新数据...")
-            result = subprocess.run(
-                [sys.executable, str(script_path), "--startup"],
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            if result.returncode == 0:
-                logger.info("数据更新成功")
-                return True
-            else:
-                logger.warning(f"数据更新失败: {result.stderr}")
-                return False
-    except Exception as e:
-        logger.warning(f"启动时更新失败: {e}")
-        return False
-
-# 首次加载时更新数据
-if "data_updated" not in st.session_state:
-    update_data_on_startup()
-    st.session_state["data_updated"] = True
 
 # ── 样式 ───────────────────────────────────────────
 st.markdown("""
@@ -74,12 +44,8 @@ h2, h3 { color: #e2e8f0 !important; }
 """, unsafe_allow_html=True)
 
 # ── 加载数据 ───────────────────────────────────────
-@st.cache_data(ttl=600)
-def load_schedule_data():
-    """加载赛程数据（10分钟更新）"""
-    return load_all()
-
 data = load_schedule_data()
+schedule = data["schedule"]
 
 @st.cache_resource
 def init_predictor():
@@ -90,194 +56,21 @@ def init_predictor():
 
 predictor = init_predictor()
 
-@st.cache_data(ttl=30)
-def fetch_live():
-    """获取实时赔率数据，优先中国体彩，国外运行时使用海外数据源"""
-    all_odds = []
-    source = "none"
-
-    # 优先尝试中国体彩（竞彩网）
-    try:
-        sporttery_data = SportteryScraper().get_all_world_cup_data()
-        if sporttery_data and sporttery_data.get("all_odds"):
-            all_odds.extend(sporttery_data["all_odds"])
-            source = "sporttery"
-            logger.info(f"从中国竞彩网获取到 {len(sporttery_data['all_odds'])} 场比赛赔率")
-    except Exception as e:
-        logger.warning(f"中国竞彩网获取失败（可能在国外）: {e}")
-
-    # 如果中国体彩失败，尝试海外数据源
-    if not all_odds:
-        logger.info("中国体彩无法访问，尝试海外数据源...")
-
-        # 尝试赔率聚合器（多个海外数据源）
-        try:
-            aggregator = get_odds_aggregator()
-            aggregated_odds = aggregator.get_all_odds()
-            if aggregated_odds:
-                all_odds.extend(aggregated_odds)
-                source = "multi_source"
-                logger.info(f"从海外赔率聚合器获取到 {len(aggregated_odds)} 场比赛赔率")
-        except Exception as e:
-            logger.warning(f"海外赔率聚合器获取失败: {e}")
-
-        # 尝试 Odds Portal（备用）
-        if not all_odds:
-            try:
-                scraper = get_odds_scraper()
-                odds_list = scraper.get_world_cup_odds()
-                if odds_list:
-                    all_odds.extend(odds_list)
-                    source = "oddsportal"
-                    logger.info(f"从 Odds Portal 获取到 {len(odds_list)} 场比赛赔率")
-            except Exception as e:
-                logger.warning(f"Odds Portal 获取失败: {e}")
-
-    if all_odds:
-        return {
-            "source": source,
-            "all_odds": all_odds,
-            "live_today": [],
-            "upcoming": all_odds,
-            "completed": [],
-        }
-
-    return None
-
-live = fetch_live()
-
-# 数据源信息
+live = fetch_live_odds()
 data_source = live.get("source", "none") if live else "none"
 
-@st.cache_data(ttl=30)
-def fetch_live_matches():
-    """获取实时比赛数据（每30秒更新）"""
-    try:
-        fetcher = get_live_fetcher()
-        matches = fetcher.get_live_matches()
-        if matches:
-            logger.info(f"成功获取 {len(matches)} 场实时比赛")
-        else:
-            logger.warning("未获取到实时比赛数据")
-        return matches
-    except Exception as e:
-        logger.error(f"实时数据获取失败: {e}")
-        return []
-
 live_matches = fetch_live_matches()
-
-# 如果实时数据不足，使用赛程数据补充
-if live_matches and len(live_matches) < 4:
-    # 获取所有比赛日期
-    all_dates = set()
-    if not data["schedule"].empty:
-        for _, row in data["schedule"].iterrows():
-            d = row["match_date"].strftime("%Y-%m-%d") if hasattr(row["match_date"], "strftime") else str(row["match_date"])
-            all_dates.add(d)
-
-    # 检查是否有遗漏的比赛
-    live_match_keys = {f"{m.get('home_team', '')}|{m.get('away_team', '')}" for m in live_matches}
-    logger.info(f"实时数据有 {len(live_matches)} 场比赛，赛程有 {len(all_dates)} 个比赛日")
-
-# 调试信息（侧边栏显示）
-with st.sidebar:
-    if live_matches:
-        st.success(f"✅ 实时数据已加载：{len(live_matches)} 场比赛")
-    else:
-        st.warning("⚠️ 实时数据未加载")
-
-        # 测试 API 连接
-        st.markdown("---")
-        st.subheader("🔧 API 测试")
-
-        if st.button("测试 ESPN API（美国）"):
-            try:
-                import requests
-                response = requests.get(
-                    "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world.cup/scoreboard",
-                    timeout=10
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    events = data.get("events", [])
-                    st.success(f"✅ ESPN API 可用，返回 {len(events)} 场比赛")
-                else:
-                    st.error(f"❌ ESPN API 返回状态码: {response.status_code}")
-            except Exception as e:
-                st.error(f"❌ ESPN API 连接失败: {e}")
-
-        if st.button("测试 Fox Sports API（美国）"):
-            try:
-                import requests
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Origin": "https://www.foxsports.com",
-                    "Referer": "https://www.foxsports.com/soccer/world-cup",
-                }
-                response = requests.get(
-                    "https://api.foxsports.com/sports/v1/soccer/worldcup/scores",
-                    headers=headers,
-                    timeout=10
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    games = data.get("games", [])
-                    st.success(f"✅ Fox Sports API 可用，返回 {len(games)} 场比赛")
-                else:
-                    st.error(f"❌ Fox Sports API 返回状态码: {response.status_code}")
-            except Exception as e:
-                st.error(f"❌ Fox Sports API 连接失败: {e}")
-
-        if st.button("测试 CBS Sports API（美国）"):
-            try:
-                import requests
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Origin": "https://www.cbssports.com",
-                    "Referer": "https://www.cbssports.com/soccer/world-cup/",
-                }
-                response = requests.get(
-                    "https://www.cbssports.com/api/sports/soccer/worldcup/scores",
-                    headers=headers,
-                    timeout=10
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    games = data.get("games", [])
-                    st.success(f"✅ CBS Sports API 可用，返回 {len(games)} 场比赛")
-                else:
-                    st.error(f"❌ CBS Sports API 返回状态码: {response.status_code}")
-            except Exception as e:
-                st.error(f"❌ CBS Sports API 连接失败: {e}")
-
-        if st.button("测试 SofaScore API（国际）"):
-            try:
-                import requests
-                response = requests.get(
-                    "https://api.sofascore.com/api/v1/unique-tournament/16/season/52186/events",
-                    timeout=10
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    events = data.get("events", [])
-                    st.success(f"✅ SofaScore API 可用，返回 {len(events)} 场比赛")
-                else:
-                    st.error(f"❌ SofaScore API 返回状态码: {response.status_code}")
-            except Exception as e:
-                st.error(f"❌ SofaScore API 连接失败: {e}")
-
-        st.markdown("---")
-        st.info("如果所有 API 测试都失败，说明 Streamlit Cloud 服务器无法访问这些 API")
+live_match_map = build_live_match_map(live_matches)
 
 # ── 常量 ───────────────────────────────────────────
 TOURNAMENT_START = date(2026, 6, 12)
 TOURNAMENT_END = date(2026, 7, 20)
-STATUS_CN = {"upcoming": "⏳ 未开赛", "possibly_live": "🔴 进行中", "likely_completed": "✅ 已完场", "completed": "✅ 已完场"}
-
-# 使用北京时间
 BEIJING_TZ = ZoneInfo("Asia/Shanghai")
 today = datetime.now(BEIJING_TZ).date()
 now_beijing = datetime.now(BEIJING_TZ)
+
+# ── 计算已完场数 ───────────────────────────────────
+finished_count = get_finished_count(schedule, live_matches)
 
 # ── 侧边栏 ─────────────────────────────────────────
 with st.sidebar:
@@ -301,87 +94,50 @@ with st.sidebar:
     st.markdown(f"**参赛队伍：** 48 支 · 12 组 · 104 场比赛")
 
     st.markdown("---")
+    st.markdown(f"**实时状态：** ✅已完场 {finished_count} 场")
+
+    # 可展开的已结束比赛列表
+    with st.expander("✅ 已结束比赛", expanded=False):
+        # 从赛程获取今天之前的比赛
+        if not schedule.empty:
+            past = schedule[schedule["match_date"] < pd.Timestamp(today)]
+            past_real = past[past["home_team"] != "TBD"]
+
+            # 按日期分组
+            dates_shown = set()
+            for _, match in past_real.iterrows():
+                home = match["home_team"]
+                away = match["away_team"]
+                match_date = match["match_date"].strftime("%m月%d日") if hasattr(match["match_date"], "strftime") else ""
+
+                if match_date and match_date not in dates_shown:
+                    st.markdown(f"**📅 {match_date}**")
+                    dates_shown.add(match_date)
+
+                key = f"{home}|{away}"
+                if key in live_match_map:
+                    m = live_match_map[key]
+                    score = f"{m.get('home_score', 0)} - {m.get('away_score', 0)}"
+                    st.markdown(f"- {home} {score} {away}")
+                else:
+                    st.markdown(f"- {home} vs {away}")
+
+        # 显示今天已结束的比赛
+        finished_today = [m for m in live_matches if m.get("status") == "finished"]
+        if finished_today:
+            st.markdown(f"**📅 {today.strftime('%m月%d日')}**")
+            for match in finished_today:
+                home = match.get("home_team", "")
+                away = match.get("away_team", "")
+                score = f"{match.get('home_score', 0)} - {match.get('away_score', 0)}"
+                st.markdown(f"- {home} {score} {away}")
+
+    st.markdown("---")
     st.caption(f"🔄 每30秒自动刷新 | {now_beijing.strftime('%H:%M:%S')} (北京时间)")
 
 # ── 头部 ──────────────────────────────────────────
-schedule = data["schedule"]
 day = max(1, (today - TOURNAMENT_START).days + 1)
 is_tournament = TOURNAMENT_START <= today <= TOURNAMENT_END
-
-# 实时比赛状态（使用 CSV 赛程数据计算，更准确）
-if not schedule.empty:
-    today_str = today.isoformat()
-    # 统计今天之前的所有比赛（已完场）
-    past = schedule[schedule["match_date"] < pd.Timestamp(today)]
-    past_real = past[past["home_team"] != "TBD"]
-    finished_count = len(past_real)
-
-    # 加上今天已结束的比赛（从实时数据）
-    if live_matches:
-        today_finished = len([m for m in live_matches
-                             if m.get("status") == "finished"])
-        finished_count += today_finished
-
-    # 从 live_results.json 读取比分数据
-    results_file = Path(__file__).parent / "data" / "bundled" / "live_results.json"
-    results_data = {}
-    if results_file.exists():
-        try:
-            import json
-            with open(results_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                for event in data.get("events", []):
-                    # 提取队伍名称
-                    name = event.get("name", "")
-                    if " at " in name:
-                        parts = name.split(" at ")
-                        away_team = parts[0].strip()
-                        home_team = parts[1].strip()
-                    else:
-                        continue
-
-                    # 提取比分
-                    competitors = event.get("competitions", [{}])[0].get("competitors", [])
-                    if len(competitors) == 2:
-                        home_score = competitors[0].get("score", "0")
-                        away_score = competitors[1].get("score", "0")
-                        results_data[f"{home_team}|{away_team}"] = {
-                            "home_score": home_score,
-                            "away_score": away_score
-                        }
-        except Exception as e:
-            logger.warning(f"读取比分数据失败: {e}")
-
-    # 在侧边栏显示
-    with st.sidebar:
-        st.markdown(f"**实时状态：** ✅已完场 {finished_count} 场")
-
-        # 可展开的已结束比赛列表
-        with st.expander("✅ 已结束比赛", expanded=False):
-            # 显示昨天的比赛
-            if not past_real.empty:
-                st.markdown("**📅 6月12日**")
-                for _, match in past_real.iterrows():
-                    home = match["home_team"]
-                    away = match["away_team"]
-                    # 尝试从结果数据中获取比分
-                    key = f"{home}|{away}"
-                    if key in results_data:
-                        score = results_data[key]
-                        st.markdown(f"- {home} {score['home_score']} - {score['away_score']} {away}")
-                    else:
-                        st.markdown(f"- {home} vs {away}")
-
-            # 显示今天已结束的比赛（有比分）
-            if live_matches:
-                finished_today = [m for m in live_matches if m.get("status") == "finished"]
-                if finished_today:
-                    st.markdown("**📅 6月13日**")
-                    for match in finished_today:
-                        home = match.get("home_team", "")
-                        away = match.get("away_team", "")
-                        score = f"{match.get('home_score', 0)} - {match.get('away_score', 0)}"
-                        st.markdown(f"- {home} {score} {away}")
 
 c1, c2, c3 = st.columns([2, 1, 1])
 with c1:
@@ -392,76 +148,12 @@ with c2:
     else:
         st.metric("距开赛", f"{(TOURNAMENT_START - today).days} 天" if today < TOURNAMENT_START else "已结束")
 with c3:
-    # 使用 CSV 赛程数据计算已完场数（更准确）
-    if not schedule.empty:
-        st.metric("已完场", f"{finished_count} 场")
-    elif live_matches:
-        # 备用方案：只使用实时数据
-        finished_count = len([m for m in live_matches if m.get("status") == "finished"])
-        st.metric("已完场", f"{finished_count} 场")
-    else:
-        st.metric("数据状态", "离线模式")
+    st.metric("已完场", f"{finished_count} 场")
 
 st.markdown("---")
 
 # ── 今日比赛 ───────────────────────────────────────
 st.subheader("📅 今日比赛 & 赔率")
-
-# 创建实时比赛数据映射（用于同步比分和状态）
-live_match_map = {}
-if live_matches:
-    for m in live_matches:
-        home = m.get("home_team", "")
-        away = m.get("away_team", "")
-        if home and away:
-            # 标准化名称
-            home_norm = home.replace("Bosnia-Herzegovina", "Bosnia").replace("United States", "USA")
-            away_norm = away.replace("Bosnia-Herzegovina", "Bosnia").replace("United States", "USA")
-            key = f"{home_norm}|{away_norm}"
-            live_match_map[key] = m
-
-# 从 live_results.json 读取比分数据（补充实时数据）
-results_file = Path(__file__).parent / "data" / "bundled" / "live_results.json"
-if results_file.exists():
-    try:
-        import json as json_lib
-        with open(results_file, 'r', encoding='utf-8') as f:
-            results_data = json_lib.load(f)
-            for event in results_data.get("events", []):
-                # 提取队伍名称
-                name = event.get("name", "")
-                if " at " in name:
-                    parts = name.split(" at ")
-                    away_team = parts[0].strip()
-                    home_team = parts[1].strip()
-                else:
-                    continue
-
-                # 标准化名称
-                home_norm = home_team.replace("Bosnia-Herzegovina", "Bosnia").replace("United States", "USA")
-                away_norm = away_team.replace("Bosnia-Herzegovina", "Bosnia").replace("United States", "USA")
-                key = f"{home_norm}|{away_norm}"
-
-                # 如果实时数据中没有这个比赛，才添加
-                if key not in live_match_map:
-                    # 提取比分
-                    competitors = event.get("competitions", [{}])[0].get("competitors", [])
-                    if len(competitors) == 2:
-                        home_score = int(competitors[0].get("score", "0"))
-                        away_score = int(competitors[1].get("score", "0"))
-                        live_match_map[key] = {
-                            "home_team": home_norm,
-                            "away_team": away_norm,
-                            "home_score": home_score,
-                            "away_score": away_score,
-                            "status": "finished",
-                            "status_detail": "FT",
-                            "minute": "90'",
-                            "events": [],
-                            "source": "results_file"
-                        }
-    except Exception as e:
-        logger.warning(f"读取比分数据失败: {e}")
 
 # 合并 CSV 赛程 + 竞彩实时数据
 live_odds_map = {}
@@ -484,12 +176,11 @@ if not schedule.empty:
 
     # 显示最近 4 天
     all_dates = sorted(csv_by_date.keys())
-    # 找到今天或之后的第一天
     today_str = today.isoformat()
     start_idx = 0
     for i, d in enumerate(all_dates):
         if d >= today_str:
-            start_idx = max(0, i - 1)  # 从昨天开始显示
+            start_idx = max(0, i - 1)
             break
     show_dates = all_dates[start_idx:start_idx + 4]
 
@@ -513,17 +204,14 @@ if not schedule.empty:
                 odds_m = live_odds_map.get(key, {})
                 had = odds_m.get("odds_had", {})
 
-                # 判断比赛状态（优先使用实时数据）
+                # 判断比赛状态
                 if live_m:
-                    # 使用实时比赛的状态
                     if live_m.get("status") == "live":
                         status = "🔴 进行中"
                     elif live_m.get("status") == "finished":
                         status = "✅ 已完场"
                     else:
                         status = "⏳ 未开赛"
-                elif odds_m.get("match_status"):
-                    status = STATUS_CN.get(odds_m["match_status"], "⏳ 未开赛")
                 elif d < today_str:
                     status = "✅ 已完场"
                 elif d == today_str:
@@ -546,12 +234,10 @@ if not schedule.empty:
                 except Exception:
                     model_text = "—"
 
-                # 比分（优先使用实时数据）
+                # 比分
                 score = ""
                 if live_m and live_m.get("home_score") is not None:
                     score = f" | {live_m['home_score']}-{live_m['away_score']}"
-                elif odds_m.get("home_score") is not None:
-                    score = f" | {odds_m['home_score']}-{odds_m['away_score']}"
 
                 st.markdown(f"""
                 <div style="background:#1e293b;padding:0.8rem;border-radius:0.5rem;margin-bottom:0.5rem;font-size:0.9em;">
@@ -570,7 +256,6 @@ if live_matches:
     st.markdown("---")
     st.subheader("🔴 实时比赛")
 
-    # 正在进行的比赛
     live_now = [m for m in live_matches if m.get("status") == "live"]
     if live_now:
         for match in live_now:
@@ -580,7 +265,6 @@ if live_matches:
             away_score = match.get("away_score", 0)
             minute = match.get("minute", "")
 
-            # 获取队伍旗帜
             home_flag = TEAMS.get(home, {}).get("flag", "⚽")
             away_flag = TEAMS.get(away, {}).get("flag", "⚽")
 
@@ -599,7 +283,6 @@ if live_matches:
             </div>
             """, unsafe_allow_html=True)
 
-    # 刚结束的比赛
     finished = [m for m in live_matches if m.get("status") == "finished"]
     if finished:
         for match in finished[:5]:
