@@ -5,8 +5,10 @@
 
 import sys, os, math
 import logging
+import subprocess
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from collections import defaultdict
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,35 @@ st.set_page_config(page_title="2026 世界杯预测工具", page_icon="🏆", la
 
 # 自动刷新（30秒）
 st_autorefresh(interval=30000, key="main_autorefresh")
+
+# ── 启动时更新数据 ─────────────────────────────────
+@st.cache_data(ttl=7200)  # 2小时缓存
+def update_data_on_startup():
+    """启动时更新数据（每2小时）"""
+    try:
+        script_path = Path(__file__).parent / "scheduled_update.py"
+        if script_path.exists():
+            logger.info("启动时更新数据...")
+            result = subprocess.run(
+                [sys.executable, str(script_path), "--startup"],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode == 0:
+                logger.info("数据更新成功")
+                return True
+            else:
+                logger.warning(f"数据更新失败: {result.stderr}")
+                return False
+    except Exception as e:
+        logger.warning(f"启动时更新失败: {e}")
+        return False
+
+# 首次加载时更新数据
+if "data_updated" not in st.session_state:
+    update_data_on_startup()
+    st.session_state["data_updated"] = True
 
 # ── 样式 ───────────────────────────────────────────
 st.markdown("""
