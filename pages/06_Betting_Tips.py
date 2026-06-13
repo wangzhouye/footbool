@@ -15,15 +15,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
+from streamlit_autorefresh import st_autorefresh
 
-from src.data.loader import load_all
+from src.data.shared import (
+    load_schedule_data, fetch_live_odds, fetch_live_matches,
+    build_live_match_map, normalize_team_name
+)
 from src.models.predictor import MatchPredictor
 from src.models.value_analyzer import (
     scan_all_matches, analyze_match_value, get_summary_stats,
     calculate_ev, calculate_kelly
 )
-from src.data.sporttery_scraper import SportteryScraper, odds_to_win_probability
-from src.data.odds_scraper import get_odds_scraper
+from src.data.sporttery_scraper import odds_to_win_probability
 from src.utils.viz_helpers import (
     create_ev_comparison_chart, create_ev_heatmap, create_opportunity_bar_chart
 )
@@ -31,6 +34,9 @@ from src.utils.config import TEAMS, GROUPS
 
 # ── 页面设置 ────────────────────────────────────────
 st.set_page_config(page_title="投注价值分析", page_icon="💰", layout="wide")
+
+# 自动刷新（30秒）
+st_autorefresh(interval=30000, key="betting_autorefresh")
 
 # ── 样式 ───────────────────────────────────────────
 st.markdown("""
@@ -46,40 +52,23 @@ h2, h3 { color: #e2e8f0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-
 # ── 初始化 ────────────────────────────────────────
+data = load_schedule_data()
+
 @st.cache_resource
-def init():
-    data = load_all()
+def init_predictor():
     pred = MatchPredictor()
     if not data["historical"].empty:
         pred.load_historical_data(data["historical"])
-    return pred, data
+    return pred
 
+predictor = init_predictor()
 
-predictor, data = init()
+live = fetch_live_odds()
+odds_list = live.get("all_odds", []) if live else []
 
-
-@st.cache_data(ttl=120)
-def fetch_odds():
-    """获取赔率数据，优先使用海外数据源"""
-    # 尝试海外数据源（无需 API Key）
-    try:
-        scraper = get_odds_scraper()
-        odds_list = scraper.get_world_cup_odds()
-        if odds_list:
-            return odds_list
-    except Exception:
-        pass
-
-    # 回退到中国竞彩网
-    try:
-        return SportteryScraper().get_world_cup_odds()
-    except Exception:
-        return []
-
-
-odds_list = fetch_odds()
+live_matches = fetch_live_matches()
+live_match_map = build_live_match_map(live_matches)
 
 
 # ── 侧边栏 ─────────────────────────────────────────
@@ -88,9 +77,12 @@ with st.sidebar:
     st.title("💰 投注价值分析")
 
     if odds_list:
-        # 判断数据源
-        source = "Odds Portal" if any(m.get("source") == "oddsportal" for m in odds_list) else "中国竞彩网"
-        st.markdown(f"🟢 **{source}已连接** — {len(odds_list)} 场比赛")
+        source_name = {
+            "sporttery": "中国体彩",
+            "multi_source": "海外数据源",
+            "oddsportal": "Odds Portal",
+        }.get(live.get("source"), "赔率数据") if live else "赔率数据"
+        st.markdown(f"🟢 **{source_name}已连接** — {len(odds_list)} 场比赛")
     else:
         st.markdown("🔴 赔率数据未连接")
 
