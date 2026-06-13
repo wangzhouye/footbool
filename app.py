@@ -20,6 +20,7 @@ from src.data.loader import load_all
 from src.models.predictor import MatchPredictor
 from src.data.sporttery_scraper import SportteryScraper, odds_to_win_probability
 from src.data.odds_scraper import get_odds_scraper
+from src.data.odds_sources import get_odds_aggregator
 from src.data.live_data import get_live_fetcher
 from src.utils.viz_helpers import create_champion_bar_chart, create_confederation_pie
 from src.utils.config import TEAMS, GROUPS
@@ -54,16 +55,31 @@ predictor, data = init()
 
 @st.cache_data(ttl=30)
 def fetch_live():
-    """获取实时赔率数据，优先使用海外数据源"""
+    """获取实时赔率数据，使用多个数据源"""
     all_odds = []
 
-    # 尝试 Odds Portal
+    # 尝试赔率聚合器（多个数据源）
+    try:
+        aggregator = get_odds_aggregator()
+        aggregated_odds = aggregator.get_all_odds()
+        if aggregated_odds:
+            all_odds.extend(aggregated_odds)
+            logger.info(f"从赔率聚合器获取到 {len(aggregated_odds)} 场比赛赔率")
+    except Exception as e:
+        logger.warning(f"赔率聚合器获取失败: {e}")
+
+    # 尝试 Odds Portal（备用）
     try:
         scraper = get_odds_scraper()
         odds_list = scraper.get_world_cup_odds()
         if odds_list:
-            all_odds.extend(odds_list)
-            logger.info(f"从 Odds Portal 获取到 {len(odds_list)} 场比赛赔率")
+            # 避免重复
+            existing_keys = {f"{m['home_team']}|{m['away_team']}" for m in all_odds}
+            for m in odds_list:
+                key = f"{m['home_team']}|{m['away_team']}"
+                if key not in existing_keys:
+                    all_odds.append(m)
+            logger.info(f"从 Odds Portal 补充赔率数据")
     except Exception as e:
         logger.warning(f"Odds Portal 获取失败: {e}")
 
@@ -83,7 +99,7 @@ def fetch_live():
 
     if all_odds:
         return {
-            "source": "mixed",
+            "source": "multi_source",
             "all_odds": all_odds,
             "live_today": [],
             "upcoming": all_odds,
@@ -222,6 +238,7 @@ with st.sidebar:
     if live:
         n = len(live.get("all_odds", []))
         source_name = {
+            "multi_source": "多数据源聚合",
             "mixed": "Odds Portal + 中国竞彩网",
             "oddsportal": "Odds Portal",
             "odds_api": "The Odds API",
@@ -532,6 +549,7 @@ if not schedule.empty:
 
 st.markdown("---")
 source_text = {
+    "multi_source": "多数据源聚合",
     "mixed": "Odds Portal + 中国体育彩票竞彩网",
     "oddsportal": "Odds Portal",
     "odds_api": "The Odds API",

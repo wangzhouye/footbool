@@ -127,6 +127,7 @@ class LiveDataFetcher:
             ]
         """
         logger.info("正在获取实时比赛数据...")
+        all_matches = []
         errors = []
 
         # 尝试 ESPN API（美国本地）
@@ -134,9 +135,7 @@ class LiveDataFetcher:
             matches = self._fetch_from_espn()
             if matches:
                 logger.info(f"从 ESPN 获取到 {len(matches)} 场比赛")
-                return matches
-            else:
-                logger.info("ESPN API 返回空数据（可能当前无比赛）")
+                all_matches.extend(matches)
         except Exception as e:
             error_msg = f"ESPN API 失败: {e}"
             logger.warning(error_msg)
@@ -147,9 +146,11 @@ class LiveDataFetcher:
             matches = self._fetch_from_espn_mens()
             if matches:
                 logger.info(f"从 ESPN Men's 获取到 {len(matches)} 场比赛")
-                return matches
-            else:
-                logger.info("ESPN Men's API 返回空数据（可能当前无比赛）")
+                # 避免重复
+                existing_ids = {m.get("match_id") for m in all_matches}
+                for m in matches:
+                    if m.get("match_id") not in existing_ids:
+                        all_matches.append(m)
         except Exception as e:
             error_msg = f"ESPN Men's API 失败: {e}"
             logger.warning(error_msg)
@@ -160,9 +161,11 @@ class LiveDataFetcher:
             matches = self._fetch_from_foxsports()
             if matches:
                 logger.info(f"从 Fox Sports 获取到 {len(matches)} 场比赛")
-                return matches
-            else:
-                logger.info("Fox Sports API 返回空数据（可能当前无比赛）")
+                # 避免重复
+                existing_ids = {m.get("match_id") for m in all_matches}
+                for m in matches:
+                    if m.get("match_id") not in existing_ids:
+                        all_matches.append(m)
         except Exception as e:
             error_msg = f"Fox Sports API 失败: {e}"
             logger.warning(error_msg)
@@ -173,9 +176,11 @@ class LiveDataFetcher:
             matches = self._fetch_from_cbssports()
             if matches:
                 logger.info(f"从 CBS Sports 获取到 {len(matches)} 场比赛")
-                return matches
-            else:
-                logger.info("CBS Sports API 返回空数据（可能当前无比赛）")
+                # 避免重复
+                existing_ids = {m.get("match_id") for m in all_matches}
+                for m in matches:
+                    if m.get("match_id") not in existing_ids:
+                        all_matches.append(m)
         except Exception as e:
             error_msg = f"CBS Sports API 失败: {e}"
             logger.warning(error_msg)
@@ -186,9 +191,11 @@ class LiveDataFetcher:
             matches = self._fetch_from_sofascore()
             if matches:
                 logger.info(f"从 SofaScore 获取到 {len(matches)} 场比赛")
-                return matches
-            else:
-                logger.info("SofaScore API 返回空数据（可能当前无比赛）")
+                # 避免重复
+                existing_ids = {m.get("match_id") for m in all_matches}
+                for m in matches:
+                    if m.get("match_id") not in existing_ids:
+                        all_matches.append(m)
         except Exception as e:
             error_msg = f"SofaScore API 失败: {e}"
             logger.warning(error_msg)
@@ -199,13 +206,20 @@ class LiveDataFetcher:
             matches = self._fetch_from_apifootball()
             if matches:
                 logger.info(f"从 API-Football 获取到 {len(matches)} 场比赛")
-                return matches
-            else:
-                logger.info("API-Football 返回空数据（可能当前无比赛）")
+                # 避免重复
+                existing_ids = {m.get("match_id") for m in all_matches}
+                for m in matches:
+                    if m.get("match_id") not in existing_ids:
+                        all_matches.append(m)
         except Exception as e:
             error_msg = f"API-Football 失败: {e}"
             logger.warning(error_msg)
             errors.append(error_msg)
+
+        # 返回所有比赛数据
+        if all_matches:
+            logger.info(f"总共获取到 {len(all_matches)} 场比赛")
+            return all_matches
 
         # 返回空列表，记录所有错误
         if errors:
