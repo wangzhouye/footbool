@@ -303,8 +303,12 @@ with c2:
     else:
         st.metric("距开赛", f"{(TOURNAMENT_START - today).days} 天" if today < TOURNAMENT_START else "已结束")
 with c3:
-    # 从 CSV 赛程计算已完场数（日期 < 今天）
-    if not schedule.empty:
+    # 使用实时比赛数据计算已完场数
+    if live_matches:
+        finished_count = len([m for m in live_matches if m.get("status") == "finished"])
+        st.metric("已完场", f"{finished_count} 场")
+    elif not schedule.empty:
+        # 备用方案：从 CSV 赛程计算
         past = schedule[schedule["match_date"] < pd.Timestamp(today)]
         past_real = past[past["home_team"] != "TBD"]
         st.metric("已完场", f"{len(past_real)} 场")
