@@ -420,6 +420,49 @@ if live_matches:
             key = f"{home_norm}|{away_norm}"
             live_match_map[key] = m
 
+# 从 live_results.json 读取比分数据（补充实时数据）
+results_file = Path(__file__).parent / "data" / "bundled" / "live_results.json"
+if results_file.exists():
+    try:
+        import json as json_lib
+        with open(results_file, 'r', encoding='utf-8') as f:
+            results_data = json_lib.load(f)
+            for event in results_data.get("events", []):
+                # 提取队伍名称
+                name = event.get("name", "")
+                if " at " in name:
+                    parts = name.split(" at ")
+                    away_team = parts[0].strip()
+                    home_team = parts[1].strip()
+                else:
+                    continue
+
+                # 标准化名称
+                home_norm = home_team.replace("Bosnia-Herzegovina", "Bosnia").replace("United States", "USA")
+                away_norm = away_team.replace("Bosnia-Herzegovina", "Bosnia").replace("United States", "USA")
+                key = f"{home_norm}|{away_norm}"
+
+                # 如果实时数据中没有这个比赛，才添加
+                if key not in live_match_map:
+                    # 提取比分
+                    competitors = event.get("competitions", [{}])[0].get("competitors", [])
+                    if len(competitors) == 2:
+                        home_score = int(competitors[0].get("score", "0"))
+                        away_score = int(competitors[1].get("score", "0"))
+                        live_match_map[key] = {
+                            "home_team": home_norm,
+                            "away_team": away_norm,
+                            "home_score": home_score,
+                            "away_score": away_score,
+                            "status": "finished",
+                            "status_detail": "FT",
+                            "minute": "90'",
+                            "events": [],
+                            "source": "results_file"
+                        }
+    except Exception as e:
+        logger.warning(f"读取比分数据失败: {e}")
+
 # 合并 CSV 赛程 + 竞彩实时数据
 live_odds_map = {}
 if live and live.get("all_odds"):
