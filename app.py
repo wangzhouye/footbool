@@ -228,6 +228,15 @@ with st.sidebar:
             "sporttery": "中国竞彩网",
         }.get(live.get("source"), "赔率数据")
         st.markdown(f"🟢 **{source_name}已连接** — {n} 场比赛")
+
+        # 显示赔率数据详情
+        if live.get("all_odds"):
+            with st.expander("📊 赔率数据详情"):
+                for m in live["all_odds"]:
+                    home = m.get("home_team", "")
+                    away = m.get("away_team", "")
+                    odds = m.get("odds_had", {})
+                    st.markdown(f"- {home} vs {away}: {odds}")
     else:
         st.markdown("🔴 赔率数据未连接")
 
