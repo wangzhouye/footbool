@@ -429,9 +429,6 @@ if live_matches:
     st.markdown("---")
     st.subheader("🔴 实时比赛")
 
-    # 显示所有比赛（调试用）
-    st.markdown(f"**共 {len(live_matches)} 场比赛**")
-
     # 正在进行的比赛
     live_now = [m for m in live_matches if m.get("status") == "live"]
     if live_now:
@@ -494,6 +491,64 @@ if live_matches:
                 <span style="color:#94a3b8;margin-left:0.5rem;">✅ 已结束</span>
             </div>
             """, unsafe_allow_html=True)
+
+    # 未开始的比赛
+    scheduled = [m for m in live_matches if m.get("status") == "scheduled"]
+    if scheduled:
+        st.markdown("**⏳ 未开始**")
+        for match in scheduled[:5]:  # 只显示最近 5 场
+            home = match.get("home_team", "")
+            away = match.get("away_team", "")
+            start_time = match.get("start_time", "")
+
+            home_flag = TEAMS.get(home, {}).get("flag", "⚽")
+            away_flag = TEAMS.get(away, {}).get("flag", "⚽")
+
+            # 解析开始时间
+            try:
+                if start_time:
+                    dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+                    time_str = dt.strftime("%H:%M")
+                else:
+                    time_str = "待定"
+            except:
+                time_str = "待定"
+
+            st.markdown(f"""
+            <div style="background:#1e293b;padding:0.8rem;border-radius:0.5rem;margin-bottom:0.5rem;">
+                <b>{home_flag} {home}</b>
+                <span style="font-size:1.2em;font-weight:bold;margin:0 0.5rem;">vs</span>
+                <b>{away} {away_flag}</b>
+                <span style="color:#94a3b8;margin-left:0.5rem;">⏳ {time_str}</span>
+            </div>
+            """, unsafe_allow_html=True)
+else:
+    st.markdown("---")
+    st.subheader("🔴 实时比赛")
+    st.warning("⚠️ 未获取到实时比赛数据")
+
+    # 显示调试信息
+    with st.expander("🔧 调试信息"):
+        st.markdown("**可能原因：**")
+        st.markdown("1. ESPN API 无法访问")
+        st.markdown("2. 当前无比赛")
+        st.markdown("3. 网络连接问题")
+
+        if st.button("测试 ESPN API"):
+            try:
+                import requests
+                response = requests.get(
+                    "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world.cup/scoreboard",
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    events = data.get("events", [])
+                    st.success(f"✅ ESPN API 可用，返回 {len(events)} 场比赛")
+                else:
+                    st.error(f"❌ ESPN API 返回状态码: {response.status_code}")
+            except Exception as e:
+                st.error(f"❌ ESPN API 连接失败: {e}")
 
 st.markdown("---")
 
