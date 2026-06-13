@@ -55,31 +55,47 @@ predictor, data = init()
 @st.cache_data(ttl=30)
 def fetch_live():
     """获取实时赔率数据，优先使用海外数据源"""
-    # 尝试海外数据源（无需 API Key）
+    all_odds = []
+
+    # 尝试 Odds Portal
     try:
         scraper = get_odds_scraper()
         odds_list = scraper.get_world_cup_odds()
         if odds_list:
-            return {
-                "source": "oddsportal",
-                "all_odds": odds_list,
-                "live_today": [],
-                "upcoming": odds_list,
-                "completed": [],
-            }
+            all_odds.extend(odds_list)
+            logger.info(f"从 Odds Portal 获取到 {len(odds_list)} 场比赛赔率")
     except Exception as e:
-        logger.warning(f"海外数据源获取失败: {e}")
+        logger.warning(f"Odds Portal 获取失败: {e}")
 
-    # 回退到中国竞彩网
+    # 尝试中国竞彩网（补充赔率）
     try:
-        return SportteryScraper().get_all_world_cup_data()
-    except Exception:
-        return None
+        sporttery_data = SportteryScraper().get_all_world_cup_data()
+        if sporttery_data and sporttery_data.get("all_odds"):
+            # 合并赔率数据，避免重复
+            existing_keys = {f"{m['home_team']}|{m['away_team']}" for m in all_odds}
+            for m in sporttery_data["all_odds"]:
+                key = f"{m['home_team']}|{m['away_team']}"
+                if key not in existing_keys:
+                    all_odds.append(m)
+            logger.info(f"从中国竞彩网补充赔率数据")
+    except Exception as e:
+        logger.warning(f"中国竞彩网获取失败: {e}")
+
+    if all_odds:
+        return {
+            "source": "mixed",
+            "all_odds": all_odds,
+            "live_today": [],
+            "upcoming": all_odds,
+            "completed": [],
+        }
+
+    return None
 
 live = fetch_live()
 
 # 数据源信息
-data_source = live.get("source", "sporttery") if live else "none"
+data_source = live.get("source", "none") if live else "none"
 
 @st.cache_data(ttl=30)
 def fetch_live_matches():
@@ -206,6 +222,7 @@ with st.sidebar:
     if live:
         n = len(live.get("all_odds", []))
         source_name = {
+            "mixed": "Odds Portal + 中国竞彩网",
             "oddsportal": "Odds Portal",
             "odds_api": "The Odds API",
             "sporttery": "中国竞彩网",
@@ -494,6 +511,7 @@ if not schedule.empty:
 
 st.markdown("---")
 source_text = {
+    "mixed": "Odds Portal + 中国体育彩票竞彩网",
     "oddsportal": "Odds Portal",
     "odds_api": "The Odds API",
     "sporttery": "中国体育彩票竞彩网",
