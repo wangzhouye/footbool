@@ -282,6 +282,10 @@ class LiveDataFetcher:
             match_status = "finished"
         elif status_type == "STATUS_HALFTIME":
             match_status = "live"  # 半场休息也算进行中
+        elif status_detail and "FT" in status_detail:
+            match_status = "finished"  # FT = Full Time
+        elif status_detail and ("1H" in status_detail or "2H" in status_detail or "HT" in status_detail):
+            match_status = "live"  # 半场或全场进行中
         else:
             # 检查是否有比赛时间，如果有则认为是进行中
             if minute and minute != "0" and "'" in str(minute):
