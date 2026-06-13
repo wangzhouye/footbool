@@ -326,22 +326,26 @@ if not schedule.empty:
     with st.sidebar:
         st.markdown(f"**实时状态：** ✅已完场 {finished_count} 场")
 
-        # 显示已结束的比赛
-        st.markdown("**✅ 已结束：**")
-        # 显示昨天的比赛
-        for _, match in past_real.iterrows():
-            home = match["home_team"]
-            away = match["away_team"]
-            st.markdown(f"- {home} vs {away}")
+        # 可展开的已结束比赛列表
+        with st.expander("✅ 已结束比赛", expanded=False):
+            # 显示昨天的比赛（无比分）
+            if not past_real.empty:
+                st.markdown("**📅 6月12日**")
+                for _, match in past_real.iterrows():
+                    home = match["home_team"]
+                    away = match["away_team"]
+                    st.markdown(f"- {home} vs {away}")
 
-        # 显示今天已结束的比赛
-        if live_matches:
-            finished_today = [m for m in live_matches if m.get("status") == "finished"]
-            for match in finished_today:
-                home = match.get("home_team", "")
-                away = match.get("away_team", "")
-                score = f"{match.get('home_score', 0)} - {match.get('away_score', 0)}"
-                st.markdown(f"- {home} {score} {away}")
+            # 显示今天已结束的比赛（有比分）
+            if live_matches:
+                finished_today = [m for m in live_matches if m.get("status") == "finished"]
+                if finished_today:
+                    st.markdown("**📅 6月13日**")
+                    for match in finished_today:
+                        home = match.get("home_team", "")
+                        away = match.get("away_team", "")
+                        score = f"{match.get('home_score', 0)} - {match.get('away_score', 0)}"
+                        st.markdown(f"- {home} {score} {away}")
 
 c1, c2, c3 = st.columns([2, 1, 1])
 with c1:
