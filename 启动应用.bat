@@ -1,37 +1,40 @@
 @echo off
 chcp 65001 >nul
-title 2026 世界杯预测工具
+title 2026 WC Predictor
 
 echo ========================================
-echo   2026 世界杯预测工具 - 启动脚本
+echo   2026 WC Predictor
 echo ========================================
 echo.
 
 cd /d "%~dp0"
 
-echo [1/3] 检查 Python 环境...
-python --version >nul 2>&1
+REM Activate conda base environment
+call E:\miniaconda\Scripts\activate.bat E:\miniaconda
+
+echo [1/3] Checking Python...
+python --version
 if errorlevel 1 (
-    echo 错误: 未找到 Python，请先安装 Python 3.11+
+    echo Error: Python not found
     pause
     exit /b 1
 )
-echo Python 环境正常
+echo Python OK
 
 echo.
-echo [2/3] 更新数据...
+echo [2/3] Updating data...
 python scheduled_update.py --startup
 if errorlevel 1 (
-    echo 警告: 数据更新失败，将使用缓存数据
+    echo Warning: data update failed
 )
 
 echo.
-echo [3/3] 启动应用...
-echo 应用启动后，请访问: http://localhost:8501
-echo.
-echo 提示: 按 Ctrl+C 可以停止应用
+echo [3/3] Starting app...
+echo URL: http://localhost:8501
+echo Press Ctrl+C to stop
 echo ========================================
+echo.
 
-streamlit run app.py --server.port 8501 --server.headless true
+python -m streamlit run app.py --server.port 8501 --server.headless true
 
 pause
