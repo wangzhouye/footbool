@@ -124,6 +124,8 @@ def build_live_match_map(live_matches: List[Dict]) -> Dict:
     合并实时数据和结果文件数据
     """
     match_map = {}
+    today = datetime.now(BEIJING_TZ).date()
+    today_str = today.isoformat()
 
     # 从实时数据构建
     for m in live_matches:
@@ -146,21 +148,54 @@ def build_live_match_map(live_matches: List[Dict]) -> Dict:
         key = f"{home_team}|{away_team}"
 
         if key not in match_map:
-            competitors = event.get("competitions", [{}])[0].get("competitors", [])
-            if len(competitors) == 2:
-                home_score = int(competitors[0].get("score", "0"))
-                away_score = int(competitors[1].get("score", "0"))
-                match_map[key] = {
-                    "home_team": home_team,
-                    "away_team": away_team,
-                    "home_score": home_score,
-                    "away_score": away_score,
-                    "status": "finished",
-                    "status_detail": "FT",
-                    "minute": "90'",
-                    "events": [],
-                    "source": "results_file",
-                }
+            # 检查比赛日期
+            event_date = event.get("date", "")
+            if event_date:
+                # 解析日期（格式：2026-06-13T19:00Z）
+                try:
+                    match_date = event_date[:10]  # 取日期部分
+                except:
+                    match_date = ""
+            else:
+                match_date = ""
+
+            # 只有今天或之前的比赛才标记为已结束
+            if match_date and match_date <= today_str:
+                competitors = event.get("competitions", [{}])[0].get("competitors", [])
+                if len(competitors) == 2:
+                    home_score = int(competitors[0].get("score", "0"))
+                    away_score = int(competitors[1].get("score", "0"))
+
+                    # 检查比赛状态
+                    status_type = event.get("competitions", [{}])[0].get("status", {}).get("type", {})
+                    status_name = status_type.get("name", "")
+
+                    if status_name == "STATUS_FULL_TIME" or (home_score > 0 or away_score > 0):
+                        # 已结束的比赛
+                        match_map[key] = {
+                            "home_team": home_team,
+                            "away_team": away_team,
+                            "home_score": home_score,
+                            "away_score": away_score,
+                            "status": "finished",
+                            "status_detail": "FT",
+                            "minute": "90'",
+                            "events": [],
+                            "source": "results_file",
+                        }
+                    else:
+                        # 未开始或进行中的比赛
+                        match_map[key] = {
+                            "home_team": home_team,
+                            "away_team": away_team,
+                            "home_score": home_score,
+                            "away_score": away_score,
+                            "status": "scheduled",
+                            "status_detail": "Scheduled",
+                            "minute": "0",
+                            "events": [],
+                            "source": "results_file",
+                        }
 
     return match_map
 
