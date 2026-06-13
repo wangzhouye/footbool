@@ -333,8 +333,7 @@ with c3:
         # 加上今天已结束的比赛（从实时数据）
         if live_matches:
             today_finished = len([m for m in live_matches
-                                 if m.get("status") == "finished"
-                                 and m.get("start_time", "").startswith(today_str)])
+                                 if m.get("status") == "finished"])
             finished_count += today_finished
 
         st.metric("已完场", f"{finished_count} 场")
