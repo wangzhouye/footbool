@@ -300,20 +300,30 @@ with st.sidebar:
     st.markdown(f"**主办国：** 🇺🇸 美国 · 🇨🇦 加拿大 · 🇲🇽 墨西哥")
     st.markdown(f"**参赛队伍：** 48 支 · 12 组 · 104 场比赛")
 
-    # 实时比赛状态（使用 CSV 赛程数据计算，更准确）
-    if not schedule.empty:
-        today_str = today.isoformat()
-        # 统计今天之前的所有比赛（已完场）
-        past = schedule[schedule["match_date"] < pd.Timestamp(today)]
-        past_real = past[past["home_team"] != "TBD"]
-        finished_count = len(past_real)
+    st.markdown("---")
+    st.caption(f"🔄 每30秒自动刷新 | {now_beijing.strftime('%H:%M:%S')} (北京时间)")
 
-        # 加上今天已结束的比赛（从实时数据）
-        if live_matches:
-            today_finished = len([m for m in live_matches
-                                 if m.get("status") == "finished"])
-            finished_count += today_finished
+# ── 头部 ──────────────────────────────────────────
+schedule = data["schedule"]
+day = max(1, (today - TOURNAMENT_START).days + 1)
+is_tournament = TOURNAMENT_START <= today <= TOURNAMENT_END
 
+# 实时比赛状态（使用 CSV 赛程数据计算，更准确）
+if not schedule.empty:
+    today_str = today.isoformat()
+    # 统计今天之前的所有比赛（已完场）
+    past = schedule[schedule["match_date"] < pd.Timestamp(today)]
+    past_real = past[past["home_team"] != "TBD"]
+    finished_count = len(past_real)
+
+    # 加上今天已结束的比赛（从实时数据）
+    if live_matches:
+        today_finished = len([m for m in live_matches
+                             if m.get("status") == "finished"])
+        finished_count += today_finished
+
+    # 在侧边栏显示
+    with st.sidebar:
         st.markdown(f"**实时状态：** ✅已完场 {finished_count} 场")
 
         # 显示已结束的比赛
@@ -332,16 +342,6 @@ with st.sidebar:
                 away = match.get("away_team", "")
                 score = f"{match.get('home_score', 0)} - {match.get('away_score', 0)}"
                 st.markdown(f"- {home} {score} {away}")
-    else:
-        st.warning("⚠️ 未获取到赛程数据")
-
-    st.markdown("---")
-    st.caption(f"🔄 每30秒自动刷新 | {now_beijing.strftime('%H:%M:%S')} (北京时间)")
-
-# ── 头部 ──────────────────────────────────────────
-schedule = data["schedule"]
-day = max(1, (today - TOURNAMENT_START).days + 1)
-is_tournament = TOURNAMENT_START <= today <= TOURNAMENT_END
 
 c1, c2, c3 = st.columns([2, 1, 1])
 with c1:
@@ -354,18 +354,6 @@ with c2:
 with c3:
     # 使用 CSV 赛程数据计算已完场数（更准确）
     if not schedule.empty:
-        today_str = today.isoformat()
-        # 统计今天之前的所有比赛（已完场）
-        past = schedule[schedule["match_date"] < pd.Timestamp(today)]
-        past_real = past[past["home_team"] != "TBD"]
-        finished_count = len(past_real)
-
-        # 加上今天已结束的比赛（从实时数据）
-        if live_matches:
-            today_finished = len([m for m in live_matches
-                                 if m.get("status") == "finished"])
-            finished_count += today_finished
-
         st.metric("已完场", f"{finished_count} 场")
     elif live_matches:
         # 备用方案：只使用实时数据
