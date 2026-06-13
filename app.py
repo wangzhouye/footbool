@@ -300,45 +300,40 @@ with st.sidebar:
     st.markdown(f"**主办国：** 🇺🇸 美国 · 🇨🇦 加拿大 · 🇲🇽 墨西哥")
     st.markdown(f"**参赛队伍：** 48 支 · 12 组 · 104 场比赛")
 
-    # 实时比赛状态
-    if live_matches:
-        live_count = len([m for m in live_matches if m.get("status") == "live"])
-        finished_count = len([m for m in live_matches if m.get("status") == "finished"])
-        scheduled_count = len([m for m in live_matches if m.get("status") == "scheduled"])
-        st.markdown(f"**实时状态：** 🔴进行中 {live_count} · ✅已完场 {finished_count} · ⏳未开赛 {scheduled_count}")
+    # 实时比赛状态（使用 CSV 赛程数据计算，更准确）
+    if not schedule.empty:
+        today_str = today.isoformat()
+        # 统计今天之前的所有比赛（已完场）
+        past = schedule[schedule["match_date"] < pd.Timestamp(today)]
+        past_real = past[past["home_team"] != "TBD"]
+        finished_count = len(past_real)
 
-        # 显示正在进行的比赛
-        live_now = [m for m in live_matches if m.get("status") == "live"]
-        if live_now:
-            st.markdown("**🔴 正在进行：**")
-            for match in live_now:
-                home = match.get("home_team", "")
-                away = match.get("away_team", "")
-                score = f"{match.get('home_score', 0)} - {match.get('away_score', 0)}"
-                minute = match.get("minute", "")
-                st.markdown(f"- {home} {score} {away} ({minute}')")
+        # 加上今天已结束的比赛（从实时数据）
+        if live_matches:
+            today_finished = len([m for m in live_matches
+                                 if m.get("status") == "finished"])
+            finished_count += today_finished
+
+        st.markdown(f"**实时状态：** ✅已完场 {finished_count} 场")
 
         # 显示已结束的比赛
-        finished_now = [m for m in live_matches if m.get("status") == "finished"]
-        if finished_now:
-            st.markdown("**✅ 已结束：**")
-            for match in finished_now:
+        st.markdown("**✅ 已结束：**")
+        # 显示昨天的比赛
+        for _, match in past_real.iterrows():
+            home = match["home_team"]
+            away = match["away_team"]
+            st.markdown(f"- {home} vs {away}")
+
+        # 显示今天已结束的比赛
+        if live_matches:
+            finished_today = [m for m in live_matches if m.get("status") == "finished"]
+            for match in finished_today:
                 home = match.get("home_team", "")
                 away = match.get("away_team", "")
                 score = f"{match.get('home_score', 0)} - {match.get('away_score', 0)}"
                 st.markdown(f"- {home} {score} {away}")
-
-        # 显示所有比赛详情（调试）
-        with st.expander("📊 实时比赛详情"):
-            for match in live_matches:
-                home = match.get("home_team", "")
-                away = match.get("away_team", "")
-                status = match.get("status", "")
-                detail = match.get("status_detail", "")
-                minute = match.get("minute", "")
-                st.markdown(f"- {home} vs {away}: {status} ({detail}, {minute}')")
     else:
-        st.warning("⚠️ 未获取到实时比赛数据")
+        st.warning("⚠️ 未获取到赛程数据")
 
     st.markdown("---")
     st.caption(f"🔄 每30秒自动刷新 | {now_beijing.strftime('%H:%M:%S')} (北京时间)")
