@@ -322,17 +322,26 @@ with c2:
     else:
         st.metric("距开赛", f"{(TOURNAMENT_START - today).days} 天" if today < TOURNAMENT_START else "已结束")
 with c3:
-    # 使用实时比赛数据计算已完场数
-    if live_matches:
-        finished_count = len([m for m in live_matches if m.get("status") == "finished"])
-        st.metric("已完场", f"{finished_count} 场")
-    elif not schedule.empty:
-        # 备用方案：从 CSV 赛程计算
+    # 使用 CSV 赛程数据计算已完场数（更准确）
+    if not schedule.empty:
+        today_str = today.isoformat()
+        # 统计今天之前的所有比赛（已完场）
         past = schedule[schedule["match_date"] < pd.Timestamp(today)]
         past_real = past[past["home_team"] != "TBD"]
-        st.metric("已完场", f"{len(past_real)} 场")
-    elif live:
-        st.metric("已完场", f"{len(live.get('completed', []))} 场")
+        finished_count = len(past_real)
+
+        # 加上今天已结束的比赛（从实时数据）
+        if live_matches:
+            today_finished = len([m for m in live_matches
+                                 if m.get("status") == "finished"
+                                 and m.get("start_time", "").startswith(today_str)])
+            finished_count += today_finished
+
+        st.metric("已完场", f"{finished_count} 场")
+    elif live_matches:
+        # 备用方案：只使用实时数据
+        finished_count = len([m for m in live_matches if m.get("status") == "finished"])
+        st.metric("已完场", f"{finished_count} 场")
     else:
         st.metric("数据状态", "离线模式")
 
