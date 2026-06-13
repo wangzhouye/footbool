@@ -318,8 +318,20 @@ st.markdown("---")
 # ── 今日比赛 ───────────────────────────────────────
 st.subheader("📅 今日比赛 & 赔率")
 
+# 创建实时比赛数据映射（用于同步比分和状态）
+live_match_map = {}
+if live_matches:
+    for m in live_matches:
+        home = m.get("home_team", "")
+        away = m.get("away_team", "")
+        if home and away:
+            # 标准化名称
+            home_norm = home.replace("Bosnia-Herzegovina", "Bosnia").replace("United States", "USA")
+            away_norm = away.replace("Bosnia-Herzegovina", "Bosnia").replace("United States", "USA")
+            key = f"{home_norm}|{away_norm}"
+            live_match_map[key] = m
+
 # 合并 CSV 赛程 + 竞彩实时数据
-# CSV 有完整赛程（含已完场），竞彩有实时赔率
 live_odds_map = {}
 if live and live.get("all_odds"):
     for m in live["all_odds"]:
@@ -361,13 +373,24 @@ if not schedule.empty:
                 hf = TEAMS.get(h, {}).get("flag", "⚽")
                 af = TEAMS.get(a, {}).get("flag", "⚽")
 
-                # 查找竞彩赔率
+                # 查找实时比赛数据（优先）
                 key = f"{h}|{a}"
+                live_m = live_match_map.get(key)
+
+                # 查找竞彩赔率
                 odds_m = live_odds_map.get(key, {})
                 had = odds_m.get("odds_had", {})
 
-                # 判断比赛状态
-                if odds_m.get("match_status"):
+                # 判断比赛状态（优先使用实时数据）
+                if live_m:
+                    # 使用实时比赛的状态
+                    if live_m.get("status") == "live":
+                        status = "🔴 进行中"
+                    elif live_m.get("status") == "finished":
+                        status = "✅ 已完场"
+                    else:
+                        status = "⏳ 未开赛"
+                elif odds_m.get("match_status"):
                     status = STATUS_CN.get(odds_m["match_status"], "⏳ 未开赛")
                 elif d < today_str:
                     status = "✅ 已完场"
@@ -391,9 +414,11 @@ if not schedule.empty:
                 except Exception:
                     model_text = "—"
 
-                # 比分
+                # 比分（优先使用实时数据）
                 score = ""
-                if odds_m.get("home_score") is not None:
+                if live_m and live_m.get("home_score") is not None:
+                    score = f" | {live_m['home_score']}-{live_m['away_score']}"
+                elif odds_m.get("home_score") is not None:
                     score = f" | {odds_m['home_score']}-{odds_m['away_score']}"
 
                 st.markdown(f"""
