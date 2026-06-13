@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-06-13T13:22:45.073687",
+  "updated_at": "2026-06-13T13:24:19.603254",
   "source": "espn",
   "events": [
     {
@@ -3466,7 +3466,7 @@
             },
             {
               "homeAway": "away",
-              "score": "1"
+              "score": "0"
             }
           ],
           "status": {
@@ -3488,11 +3488,11 @@
           "competitors": [
             {
               "homeAway": "home",
-              "score": "1"
+              "score": "2"
             },
             {
               "homeAway": "away",
-              "score": "0"
+              "score": "1"
             }
           ],
           "status": {
