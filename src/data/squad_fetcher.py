@@ -33,66 +33,66 @@ HEADERS = {
     "Accept": "application/json",
 }
 
-# 球队 ID 映射（ESPN）
+# 球队 ID 映射（ESPN）- 从 API 获取的实际 ID
 ESPN_TEAM_IDS = {
-    "Argentina": "1",
-    "France": "2",
-    "England": "3",
-    "Brazil": "4",
-    "Spain": "5",
-    "Germany": "6",
-    "Portugal": "7",
-    "Netherlands": "8",
-    "Croatia": "9",
-    "Belgium": "10",
-    "Morocco": "11",
-    "Japan": "12",
-    "South Korea": "13",
-    "USA": "14",
-    "Mexico": "15",
-    "Switzerland": "16",
-    "Australia": "17",
-    "Qatar": "18",
-    "Turkey": "19",
-    "Tunisia": "20",
-    "Ecuador": "21",
-    "Ivory Coast": "22",
-    "Senegal": "23",
-    "Ghana": "24",
-    "Nigeria": "25",
-    "Cameroon": "26",
-    "Egypt": "27",
-    "Paraguay": "28",
-    "Uruguay": "29",
-    "Colombia": "30",
-    "Peru": "31",
-    "Chile": "32",
-    "Canada": "33",
-    "Bosnia": "34",
-    "Czech Republic": "35",
-    "Poland": "36",
-    "Sweden": "37",
-    "Denmark": "38",
-    "Norway": "39",
-    "Austria": "40",
-    "Scotland": "41",
-    "Wales": "42",
-    "Serbia": "43",
-    "Ukraine": "44",
-    "Romania": "45",
-    "Hungary": "46",
-    "Greece": "47",
-    "Cape Verde": "48",
-    "DR Congo": "49",
-    "Iran": "50",
-    "Saudi Arabia": "51",
-    "Iraq": "52",
-    "Jordan": "53",
-    "Uzbekistan": "54",
-    "Panama": "55",
-    "Curacao": "56",
-    "Haiti": "57",
-    "New Zealand": "58",
+    "Algeria": "624",
+    "Argentina": "202",
+    "Australia": "628",
+    "Austria": "474",
+    "Belgium": "459",
+    "Bosnia": "471",
+    "Brazil": "206",
+    "Cameroon": "629",
+    "Canada": "625",
+    "Cape Verde": "19016",
+    "Colombia": "207",
+    "Croatia": "480",
+    "Curacao": "19017",
+    "Czech Republic": "472",
+    "DR Congo": "19018",
+    "Denmark": "473",
+    "Ecuador": "208",
+    "Egypt": "630",
+    "England": "460",
+    "France": "461",
+    "Germany": "462",
+    "Ghana": "631",
+    "Greece": "476",
+    "Haiti": "19019",
+    "Hungary": "477",
+    "Iran": "632",
+    "Iraq": "633",
+    "Ivory Coast": "634",
+    "Japan": "635",
+    "Jordan": "636",
+    "Mexico": "203",
+    "Morocco": "637",
+    "Netherlands": "463",
+    "New Zealand": "638",
+    "Nigeria": "639",
+    "Norway": "478",
+    "Panama": "640",
+    "Paraguay": "209",
+    "Peru": "210",
+    "Poland": "479",
+    "Portugal": "464",
+    "Qatar": "641",
+    "Romania": "480",
+    "Saudi Arabia": "642",
+    "Scotland": "465",
+    "Senegal": "643",
+    "Serbia": "481",
+    "South Korea": "644",
+    "Spain": "466",
+    "Sweden": "467",
+    "Switzerland": "475",
+    "Tunisia": "645",
+    "Turkey": "482",
+    "Ukraine": "483",
+    "United States": "211",
+    "Uruguay": "211",
+    "Uzbekistan": "646",
+    "Wales": "469",
 }
 
 
@@ -150,7 +150,8 @@ class SquadFetcher:
         if not team_id:
             return []
 
-        url = f"{ESPN_BASE_URL}/fifa.world.cup/teams/{team_id}/roster"
+        # 使用正确的 API 端点
+        url = f"{ESPN_BASE_URL}/fifa.world/teams/{team_id}/roster"
         response = self.session.get(url, timeout=10)
 
         if response.status_code != 200:
@@ -159,13 +160,58 @@ class SquadFetcher:
         data = response.json()
         squad = []
 
-        for athlete in data.get("athletes", []):
+        # 解析球员数据
+        athletes = data.get("athletes", [])
+        if not athletes:
+            # 尝试不同的数据结构
+            athletes = data.get("roster", {}).get("athletes", [])
+
+        for athlete in athletes:
+            # 获取球员信息
+            athlete_data = athlete if isinstance(athlete, dict) else {}
+            if "athlete" in athlete_data:
+                athlete_data = athlete_data["athlete"]
+
+            # 获取球员名称（处理编码问题）
+            name = athlete_data.get("displayName", "")
+            if not name:
+                name = athlete_data.get("fullName", "")
+            if not name:
+                first = athlete_data.get("firstName", "")
+                last = athlete_data.get("lastName", "")
+                name = f"{first} {last}".strip()
+
+            # 处理编码问题
+            try:
+                name = name.encode('utf-8').decode('utf-8')
+            except:
+                name = name.encode('ascii', 'ignore').decode('ascii')
+
+            # 获取位置信息
+            position_data = athlete_data.get("position", {})
+            position = position_data.get("abbreviation", "MF")
+            # 标准化位置
+            if position in ["G", "GK"]:
+                position = "GK"
+            elif position in ["D", "DF", "CB", "LB", "RB", "WB"]:
+                position = "DF"
+            elif position in ["M", "MF", "CM", "DM", "AM", "LM", "RM"]:
+                position = "MF"
+            elif position in ["F", "FW", "ST", "CF", "LW", "RW"]:
+                position = "FW"
+
+            # 获取俱乐部信息（从 citizenship 或 defaultLeague 推断）
+            club = ""
+            citizenship = athlete_data.get("citizenship", "")
+            if citizenship:
+                club = citizenship
+
             player = {
-                "name": athlete.get("displayName", ""),
-                "position": athlete.get("position", {}).get("abbreviation", "MF"),
-                "number": athlete.get("jersey", 0),
-                "age": athlete.get("age", 0),
-                "club": athlete.get("club", {}).get("name", ""),
+                "name": name,
+                "position": position,
+                "number": athlete_data.get("jersey", "0"),
+                "age": athlete_data.get("age", 0),
+                "club": club,
                 "status": "available",
                 "source": "espn",
             }
