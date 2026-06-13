@@ -5,7 +5,7 @@ to provide complete match predictions.
 This is the primary interface consumed by all Streamlit pages.
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import pandas as pd
 from functools import lru_cache
 
