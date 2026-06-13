@@ -8,8 +8,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import streamlit as st
 import pandas as pd
+from datetime import datetime, date
+from zoneinfo import ZoneInfo
 
-from src.data.shared import load_schedule_data
+from src.data.shared import (
+    load_schedule_data, fetch_live_matches, build_live_match_map, normalize_team_name
+)
 from src.models.predictor import MatchPredictor
 from src.models.monte_carlo import TournamentSimulator
 from src.utils.config import GROUPS, TEAMS, BRACKET_SLOTS
@@ -27,6 +31,14 @@ def init_predictor():
     return pred
 
 predictor = init_predictor()
+
+# 加载实时比赛数据
+live_matches = fetch_live_matches()
+live_match_map = build_live_match_map(live_matches)
+
+# 北京时间
+BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+today = datetime.now(BEIJING_TZ).date()
 
 # ── 界面 ──────────────────────────────────────────
 st.title("🏆 淘汰赛对阵图")
@@ -85,6 +97,48 @@ for round_name, cn_name, icon in rounds_info:
             af = TEAMS.get(away, {}).get("flag", "⚽")
             winner = match.get("winner", "")
 
+            # 查找实时比赛数据
+            key = f"{home}|{away}"
+            live_m = live_match_map.get(key)
+
+            # 判断比赛状态
+            if live_m:
+                if live_m.get("status") == "finished":
+                    # 已结束的比赛
+                    hg = live_m.get("home_score", 0)
+                    ag = live_m.get("away_score", 0)
+                    status_text = "✅ 已结束"
+                    status_color = "#22c55e"
+
+                    # 确定胜者
+                    if hg > ag:
+                        winner = home
+                    elif ag > hg:
+                        winner = away
+                    else:
+                        winner = "平局（加时/点球）"
+                elif live_m.get("status") == "live":
+                    # 进行中的比赛
+                    hg = live_m.get("home_score", 0)
+                    ag = live_m.get("away_score", 0)
+                    minute = live_m.get("minute", "")
+                    status_text = f"🔴 进行中 {minute}'"
+                    status_color = "#ef4444"
+                    winner = ""
+                else:
+                    # 未开始的比赛
+                    hg = "-"
+                    ag = "-"
+                    status_text = "⏳ 未开始"
+                    status_color = "#94a3b8"
+                    winner = ""
+            else:
+                # 没有实时数据，使用模拟数据
+                hg = match.get('home_goals', '-')
+                ag = match.get('away_goals', '-')
+                status_text = "📋 模拟预测"
+                status_color = "#60a5fa"
+
             # 预测概率
             try:
                 pred = predictor.predict(home, away, neutral=True)
@@ -101,17 +155,21 @@ for round_name, cn_name, icon in rounds_info:
             away_style = "color:#fbbf24;font-weight:bold;" if winner == away else ""
             border_color = '#fbbf24' if winner == home else '#ef4444' if winner == away else '#64748b'
 
-            # 比分
-            hg = match.get('home_goals', '-')
-            ag = match.get('away_goals', '-')
+            # 构建显示内容
+            winner_text = ""
+            if winner and winner != "平局（加时/点球）":
+                winner_flag = TEAMS.get(winner, {}).get('flag', '')
+                winner_text = f'<small style="color:#22c55e;">🏆 胜者：{winner_flag} {winner}</small><br>'
+            elif winner == "平局（加时/点球）":
+                winner_text = f'<small style="color:#fbbf24;">⚽ {winner}</small><br>'
 
             st.markdown(f"""
             <div style="background-color:#1e293b;padding:0.8rem;border-radius:0.5rem;margin-bottom:0.5rem;
                         border-left:3px solid {border_color}">
-                <small style="color:#94a3b8;">{match.get('match', '')}</small><br>
+                <small style="color:{status_color};">{status_text}</small><br>
                 <span style="{home_style}">{hf} {home}</span> <b>{hg}</b><br>
                 <span style="{away_style}">{af} {away}</span> <b>{ag}</b><br>
-                <small style="color:#22c55e;">🏆 胜者：{TEAMS.get(winner, {}).get('flag', '')} {winner}</small><br>
+                {winner_text}
                 <small style="color:#94a3b8;">{prob_text}</small>
             </div>
             """, unsafe_allow_html=True)
