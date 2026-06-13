@@ -27,8 +27,8 @@ from src.utils.config import TEAMS, GROUPS
 # ── 页面设置 ────────────────────────────────────────
 st.set_page_config(page_title="2026 世界杯预测工具", page_icon="🏆", layout="wide")
 
-# 自动刷新（1分钟）
-st_autorefresh(interval=60000, key="main_autorefresh")
+# 自动刷新（30秒）
+st_autorefresh(interval=30000, key="main_autorefresh")
 
 # ── 样式 ───────────────────────────────────────────
 st.markdown("""
@@ -52,7 +52,7 @@ def init():
 
 predictor, data = init()
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=30)
 def fetch_live():
     """获取实时赔率数据，优先使用海外数据源"""
     # 尝试海外数据源（无需 API Key）
@@ -81,9 +81,9 @@ live = fetch_live()
 # 数据源信息
 data_source = live.get("source", "sporttery") if live else "none"
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def fetch_live_matches():
-    """获取实时比赛数据（每分钟更新）"""
+    """获取实时比赛数据（每30秒更新）"""
     try:
         fetcher = get_live_fetcher()
         matches = fetcher.get_live_matches()
