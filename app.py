@@ -92,51 +92,50 @@ predictor = init_predictor()
 
 @st.cache_data(ttl=30)
 def fetch_live():
-    """获取实时赔率数据，使用多个数据源"""
+    """获取实时赔率数据，优先中国体彩，国外运行时使用海外数据源"""
     all_odds = []
+    source = "none"
 
-    # 尝试赔率聚合器（多个数据源）
-    try:
-        aggregator = get_odds_aggregator()
-        aggregated_odds = aggregator.get_all_odds()
-        if aggregated_odds:
-            all_odds.extend(aggregated_odds)
-            logger.info(f"从赔率聚合器获取到 {len(aggregated_odds)} 场比赛赔率")
-    except Exception as e:
-        logger.warning(f"赔率聚合器获取失败: {e}")
-
-    # 尝试 Odds Portal（备用）
-    try:
-        scraper = get_odds_scraper()
-        odds_list = scraper.get_world_cup_odds()
-        if odds_list:
-            # 避免重复
-            existing_keys = {f"{m['home_team']}|{m['away_team']}" for m in all_odds}
-            for m in odds_list:
-                key = f"{m['home_team']}|{m['away_team']}"
-                if key not in existing_keys:
-                    all_odds.append(m)
-            logger.info(f"从 Odds Portal 补充赔率数据")
-    except Exception as e:
-        logger.warning(f"Odds Portal 获取失败: {e}")
-
-    # 尝试中国竞彩网（补充赔率）
+    # 优先尝试中国体彩（竞彩网）
     try:
         sporttery_data = SportteryScraper().get_all_world_cup_data()
         if sporttery_data and sporttery_data.get("all_odds"):
-            # 合并赔率数据，避免重复
-            existing_keys = {f"{m['home_team']}|{m['away_team']}" for m in all_odds}
-            for m in sporttery_data["all_odds"]:
-                key = f"{m['home_team']}|{m['away_team']}"
-                if key not in existing_keys:
-                    all_odds.append(m)
-            logger.info(f"从中国竞彩网补充赔率数据")
+            all_odds.extend(sporttery_data["all_odds"])
+            source = "sporttery"
+            logger.info(f"从中国竞彩网获取到 {len(sporttery_data['all_odds'])} 场比赛赔率")
     except Exception as e:
-        logger.warning(f"中国竞彩网获取失败: {e}")
+        logger.warning(f"中国竞彩网获取失败（可能在国外）: {e}")
+
+    # 如果中国体彩失败，尝试海外数据源
+    if not all_odds:
+        logger.info("中国体彩无法访问，尝试海外数据源...")
+
+        # 尝试赔率聚合器（多个海外数据源）
+        try:
+            aggregator = get_odds_aggregator()
+            aggregated_odds = aggregator.get_all_odds()
+            if aggregated_odds:
+                all_odds.extend(aggregated_odds)
+                source = "multi_source"
+                logger.info(f"从海外赔率聚合器获取到 {len(aggregated_odds)} 场比赛赔率")
+        except Exception as e:
+            logger.warning(f"海外赔率聚合器获取失败: {e}")
+
+        # 尝试 Odds Portal（备用）
+        if not all_odds:
+            try:
+                scraper = get_odds_scraper()
+                odds_list = scraper.get_world_cup_odds()
+                if odds_list:
+                    all_odds.extend(odds_list)
+                    source = "oddsportal"
+                    logger.info(f"从 Odds Portal 获取到 {len(odds_list)} 场比赛赔率")
+            except Exception as e:
+                logger.warning(f"Odds Portal 获取失败: {e}")
 
     if all_odds:
         return {
-            "source": "multi_source",
+            "source": source,
             "all_odds": all_odds,
             "live_today": [],
             "upcoming": all_odds,
@@ -287,7 +286,12 @@ with st.sidebar:
 
     if live:
         n = len(live.get("all_odds", []))
-        st.markdown(f"🟢 **赔率数据已连接** — {n} 场比赛")
+        source_name = {
+            "sporttery": "中国体彩",
+            "multi_source": "海外数据源",
+            "oddsportal": "Odds Portal",
+        }.get(live.get("source"), "赔率数据")
+        st.markdown(f"🟢 **{source_name}已连接** — {n} 场比赛")
     else:
         st.markdown("🔴 赔率数据未连接")
 
@@ -603,10 +607,8 @@ if not schedule.empty:
 
 st.markdown("---")
 source_text = {
-    "multi_source": "多数据源聚合",
-    "mixed": "Odds Portal + 中国体育彩票竞彩网",
-    "oddsportal": "Odds Portal",
-    "odds_api": "The Odds API",
     "sporttery": "中国体育彩票竞彩网",
+    "multi_source": "海外数据源聚合",
+    "oddsportal": "Odds Portal",
 }.get(data_source, "赔率数据")
 st.caption(f"⚽ 2026 世界杯预测工具 | 赔率：{source_text} | 预测仅供参考")
