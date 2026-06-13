@@ -301,14 +301,9 @@ with st.sidebar:
                 st.markdown(f"- {home} vs {away}: {status} ({detail}, {minute}')")
     else:
         st.warning("⚠️ 未获取到实时比赛数据")
-    elif live:
-        c = len(live.get("completed", []))
-        l = len(live.get("live_today", []))
-        u = len(live.get("upcoming", []))
-        st.markdown(f"**状态：** ✅已完场 {c} · 🔴进行中 {l} · ⏳未开赛 {u}")
 
     st.markdown("---")
-    st.caption(f"🔄 每1分钟自动刷新 | {now_beijing.strftime('%H:%M:%S')} (北京时间)")
+    st.caption(f"🔄 每30秒自动刷新 | {now_beijing.strftime('%H:%M:%S')} (北京时间)")
 
 # ── 头部 ──────────────────────────────────────────
 schedule = data["schedule"]
