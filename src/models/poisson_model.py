@@ -38,6 +38,47 @@ class PoissonModel:
                  Negative values increase probability of low-scoring draws.
         """
         self.rho = rho
+        self._rho_cache = {}  # 缓存动态 rho 值
+
+    def compute_dynamic_rho(self, match_importance: str = "Friendly",
+                           team_quality_diff: float = 0.0) -> float:
+        """
+        根据比赛重要性和队伍质量差异动态调整 rho
+
+        Args:
+            match_importance: 比赛重要性 ("World Cup", "Qualifier", "Friendly")
+            team_quality_diff: 队伍质量差异 (Elo 差异 / 400)
+
+        Returns:
+            动态调整后的 rho 值
+        """
+        cache_key = f"{match_importance}_{team_quality_diff:.2f}"
+        if cache_key in self._rho_cache:
+            return self._rho_cache[cache_key]
+
+        base_rho = self.rho
+
+        # 比赛重要性调整
+        if match_importance == "World Cup":
+            importance_factor = 1.3  # 世界杯比赛更保守
+        elif "Qualifier" in match_importance:
+            importance_factor = 1.1  # 预选赛稍保守
+        else:
+            importance_factor = 1.0  # 友谊赛正常
+
+        # 队伍质量差异调整
+        # 质量差异越大，低比分概率越低
+        quality_factor = 1.0 - abs(team_quality_diff) * 0.1
+        quality_factor = max(0.7, min(1.3, quality_factor))
+
+        # 计算动态 rho
+        dynamic_rho = base_rho * importance_factor * quality_factor
+
+        # 限制范围
+        dynamic_rho = max(-0.20, min(-0.03, dynamic_rho))
+
+        self._rho_cache[cache_key] = dynamic_rho
+        return dynamic_rho
 
     def expected_goals(self, attack_home: float, defense_away: float,
                        attack_away: float, defense_home: float,
