@@ -10,7 +10,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-from src.data.loader import load_all
+from src.data.shared import load_schedule_data
 from src.models.predictor import MatchPredictor
 from src.utils.viz_helpers import create_win_prob_gauge, create_scoreline_heatmap, create_expected_goals_chart
 from src.utils.config import TEAMS, GROUPS
@@ -18,15 +18,16 @@ from src.utils.config import TEAMS, GROUPS
 # ── 初始化 ────────────────────────────────────────
 st.set_page_config(page_title="比赛预测", page_icon="⚽", layout="wide")
 
-@st.cache_resource
-def get_predictor():
-    data = load_all()
-    predictor = MatchPredictor()
-    if not data["historical"].empty:
-        predictor.load_historical_data(data["historical"])
-    return predictor, data
+data = load_schedule_data()
 
-predictor, data = get_predictor()
+@st.cache_resource
+def init_predictor():
+    pred = MatchPredictor()
+    if not data["historical"].empty:
+        pred.load_historical_data(data["historical"])
+    return pred
+
+predictor = init_predictor()
 # 只显示2026世界杯48支参赛队伍
 wc_teams = set()
 for teams in GROUPS.values():

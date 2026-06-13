@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
-from src.data.loader import load_all
+from src.data.shared import load_schedule_data
 from src.models.predictor import MatchPredictor
 from src.models.monte_carlo import TournamentSimulator
 from src.utils.viz_helpers import (
@@ -23,15 +23,16 @@ from src.utils.config import TEAMS
 # ── 初始化 ────────────────────────────────────────
 st.set_page_config(page_title="赛事模拟", page_icon="🎲", layout="wide")
 
-@st.cache_resource
-def get_engine():
-    data = load_all()
-    predictor = MatchPredictor()
-    if not data["historical"].empty:
-        predictor.load_historical_data(data["historical"])
-    return predictor, data
+data = load_schedule_data()
 
-predictor, data = get_engine()
+@st.cache_resource
+def init_predictor():
+    pred = MatchPredictor()
+    if not data["historical"].empty:
+        pred.load_historical_data(data["historical"])
+    return pred
+
+predictor = init_predictor()
 
 # ── 界面 ──────────────────────────────────────────
 st.title("🎲 蒙特卡洛赛事模拟")
