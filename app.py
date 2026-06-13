@@ -322,19 +322,55 @@ if not schedule.empty:
                              if m.get("status") == "finished"])
         finished_count += today_finished
 
+    # 从 live_results.json 读取比分数据
+    results_file = Path(__file__).parent / "data" / "bundled" / "live_results.json"
+    results_data = {}
+    if results_file.exists():
+        try:
+            import json
+            with open(results_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                for event in data.get("events", []):
+                    # 提取队伍名称
+                    name = event.get("name", "")
+                    if " at " in name:
+                        parts = name.split(" at ")
+                        away_team = parts[0].strip()
+                        home_team = parts[1].strip()
+                    else:
+                        continue
+
+                    # 提取比分
+                    competitors = event.get("competitions", [{}])[0].get("competitors", [])
+                    if len(competitors) == 2:
+                        home_score = competitors[0].get("score", "0")
+                        away_score = competitors[1].get("score", "0")
+                        results_data[f"{home_team}|{away_team}"] = {
+                            "home_score": home_score,
+                            "away_score": away_score
+                        }
+        except Exception as e:
+            logger.warning(f"读取比分数据失败: {e}")
+
     # 在侧边栏显示
     with st.sidebar:
         st.markdown(f"**实时状态：** ✅已完场 {finished_count} 场")
 
         # 可展开的已结束比赛列表
         with st.expander("✅ 已结束比赛", expanded=False):
-            # 显示昨天的比赛（无比分）
+            # 显示昨天的比赛
             if not past_real.empty:
                 st.markdown("**📅 6月12日**")
                 for _, match in past_real.iterrows():
                     home = match["home_team"]
                     away = match["away_team"]
-                    st.markdown(f"- {home} vs {away}")
+                    # 尝试从结果数据中获取比分
+                    key = f"{home}|{away}"
+                    if key in results_data:
+                        score = results_data[key]
+                        st.markdown(f"- {home} {score['home_score']} - {score['away_score']} {away}")
+                    else:
+                        st.markdown(f"- {home} vs {away}")
 
             # 显示今天已结束的比赛（有比分）
             if live_matches:
